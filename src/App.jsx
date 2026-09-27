@@ -10,72 +10,94 @@ import AuditLogs from "./pages/AuditLogs";
 
 import Layout from "./components/Layout";
 import TOTPVerification from "./pages/TOTPVerification";
+import TPMVerification from "./pages/TPMVerification";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
     <Routes>
 
-      <Route path="/" element={<Navigate to="/login" />} />
-
-      <Route path="/login" element={<Login />} />
+      {/* Public routes */}
       <Route
-  path="/verify-totp"
-  element={<TOTPVerification />}
-/>
-
-      <Route
-        path="/dashboard"
-        element={
-          <Layout>
-            <Dashboard />
-          </Layout>
-        }
+        path="/"
+        element={<Navigate to="/login" replace />}
       />
 
       <Route
-        path="/personnel"
-        element={
-          <Layout>
-            <Personnel />
-          </Layout>
-        }
+        path="/login"
+        element={<Login />}
       />
 
+      {/* TPM 2.0 hardware verification */}
       <Route
-        path="/units"
-        element={
-          <Layout>
-            <Units />
-          </Layout>
-        }
+        path="/verify-tpm"
+        element={<TPMVerification />}
       />
 
+      {/* TOTP verification */}
       <Route
-        path="/leave"
-        element={
-          <Layout>
-            <LeaveManagement />
-          </Layout>
-        }
+        path="/verify-totp"
+        element={<TOTPVerification />}
       />
 
-      <Route
-        path="/promotions"
-        element={
-          <Layout>
-            <Promotions />
-          </Layout>
-        }
-      />
+      {/* Protected routes */}
+      <Route element={<ProtectedRoute />}>
 
-      <Route
-        path="/audit"
-        element={
-          <Layout>
-            <AuditLogs />
-          </Layout>
-        }
-      />
+        <Route
+          path="/dashboard"
+          element={
+            <Layout>
+              <Dashboard />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/personnel"
+          element={
+            <Layout>
+              <Personnel />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/units"
+          element={
+            <Layout>
+              <Units />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/leave"
+          element={
+            <Layout>
+              <LeaveManagement />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/promotions"
+          element={
+            <Layout>
+              <Promotions />
+            </Layout>
+          }
+        />
+
+        <Route
+          path="/audit"
+          element={
+            <Layout>
+              <AuditLogs />
+            </Layout>
+          }
+        />
+
+      </Route>
 
     </Routes>
   );

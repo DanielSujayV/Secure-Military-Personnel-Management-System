@@ -17,26 +17,17 @@ public class RoleController {
         this.roleService = roleService;
     }
 
-    @PostMapping
-    public Role createRole(@RequestBody Role role) {
-        return roleService.createRole(role);
-    }
-
     @GetMapping
     public List<Role> getAllRoles() {
         return roleService.getAllRoles();
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Role> getRoleById(@PathVariable Long id) {
+    public ResponseEntity<Role> getRoleById(
+            @PathVariable Long id) {
+
         return roleService.getRoleById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteRole(@PathVariable Long id) {
-        roleService.deleteRole(id);
-        return ResponseEntity.noContent().build();
     }
 }

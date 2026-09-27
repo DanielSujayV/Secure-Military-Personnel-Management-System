@@ -12,18 +12,6 @@ import java.util.List;
 @RequestMapping("/api/users")
 public class UserController {
 
-
-
-
-
-
-
-
-
-
-
-
-
     private final UserService userService;
 
     public UserController(UserService userService) {
@@ -32,7 +20,6 @@ public class UserController {
 
     @PostMapping
     public UserResponse createUser(@RequestBody User user) {
-
         User createdUser = userService.createUser(user);
 
         return new UserResponse(
@@ -45,7 +32,6 @@ public class UserController {
 
     @GetMapping
     public List<UserResponse> getAllUsers() {
-
         return userService.getAllUsers()
                 .stream()
                 .map(user -> new UserResponse(
@@ -58,24 +44,48 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(@PathVariable Long id) {
+    public ResponseEntity<UserResponse> getUserById(
+            @PathVariable Long id) {
+
         return userService.getUserById(id)
-                .map(ResponseEntity::ok)
+                .map(user -> ResponseEntity.ok(
+                        new UserResponse(
+                                user.getId(),
+                                user.getUsername(),
+                                user.getRole(),
+                                user.isEnabled()
+                        )
+                ))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/username/{username}")
-    public ResponseEntity<User> getUserByUsername(
+    public ResponseEntity<UserResponse> getUserByUsername(
             @PathVariable String username) {
 
         return userService.getUserByUsername(username)
-                .map(ResponseEntity::ok)
+                .map(user -> ResponseEntity.ok(
+                        new UserResponse(
+                                user.getId(),
+                                user.getUsername(),
+                                user.getRole(),
+                                user.isEnabled()
+                        )
+                ))
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping
-    public User updateUser(@RequestBody User user) {
-        return userService.updateUser(user);
+    public UserResponse updateUser(@RequestBody User user) {
+
+        User updatedUser = userService.updateUser(user);
+
+        return new UserResponse(
+                updatedUser.getId(),
+                updatedUser.getUsername(),
+                updatedUser.getRole(),
+                updatedUser.isEnabled()
+        );
     }
 
     @DeleteMapping("/{id}")

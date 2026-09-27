@@ -1,62 +1,171 @@
 package com.military.military_personnel_management.controller;
-
+import com.military.military_personnel_management.service.AuditLogService;
+import com.military.military_personnel_management.entity.AuditLog;
+import java.time.LocalDateTime;
+import com.military.military_personnel_management.dto.TotpSetupResponse;
+import com.military.military_personnel_management.dto.TotpVerificationRequest;
 import com.military.military_personnel_management.entity.TotpCredential;
-import com.military.military_personnel_management.service.TotpCredentialService;
-import org.springframework.http.ResponseEntity;
+import com.military.military_personnel_management.entity.User;
+import com.military.military_personnel_management.repository.TotpCredentialRepository;
+import com.military.military_personnel_management.repository.UserRepository;
+import com.military.military_personnel_management.service.TotpService;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-
+import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/api/totp")
 public class TotpCredentialController {
 
-    private final TotpCredentialService totpCredentialService;
+    private final TotpCredentialRepository totpCredentialRepository;
+    private final UserRepository userRepository;
+    private final TotpService totpService;
+    private final AuditLogService auditLogService;
 
-    public TotpCredentialController(TotpCredentialService totpCredentialService) {
-        this.totpCredentialService = totpCredentialService;
+    public TotpCredentialController(
+            TotpCredentialRepository totpCredentialRepository,
+            UserRepository userRepository,
+            TotpService totpService,
+            AuditLogService auditLogService) {
+
+        this.totpCredentialRepository = totpCredentialRepository;
+        this.userRepository = userRepository;
+        this.totpService = totpService;
+        this.auditLogService = auditLogService;
     }
 
-    @PostMapping
-    public TotpCredential createTotpCredential(
-            @RequestBody TotpCredential credential) {
-        return totpCredentialService.createTotpCredential(credential);
+    @PostMapping("/setup")
+    public TotpSetupResponse setup(Authentication authentication) {
+
+        String username = authentication.getName();
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found"
+                        ));
+
+        var existingCredential =
+                totpCredentialRepository.findByUserId(user.getId());
+
+        if (existingCredential.isPresent()
+                && existingCredential.get().isEnabled()) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "TOTP is already enabled"
+            );
+        }
+
+        /*
+         * If a disabled credential already exists, replace it.
+         * This allows the user to restart setup if necessary.
+         */
+        String secret = totpService.generateSecret();
+
+        TotpCredential credential;
+
+        if (existingCredential.isPresent()) {
+            credential = existingCredential.get();
+            credential.setSecret(secret);
+            credential.setEnabled(false);
+        } else {
+            credential = new TotpCredential(user, secret);
+        }
+
+totpCredentialRepository.save(credential);
+
+auditLogService.createAuditLog(
+        new AuditLog(
+                username,
+                "TOTP_SETUP",
+                "TOTP setup initiated",
+                LocalDateTime.now()
+        )
+);
+
+String otpauthUri =
+        totpService.generateOtpAuthUri(
+                username,
+                secret
+        );
+
+        
+
+        return new TotpSetupResponse(
+                secret,
+                otpauthUri,
+                "TOTP setup created. Add it to your authenticator app and confirm the generated code."
+        );
     }
 
-    @GetMapping
-    public List<TotpCredential> getAllTotpCredentials() {
-        return totpCredentialService.getAllTotpCredentials();
-    }
+    @PostMapping("/confirm")
+    public String confirm(
+            Authentication authentication,
+            @RequestBody TotpVerificationRequest request) {
 
-    @GetMapping("/{id}")
-    public ResponseEntity<TotpCredential> getTotpCredentialById(
-            @PathVariable Long id) {
+        String username = authentication.getName();
 
-        return totpCredentialService.getTotpCredentialById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found"
+                        ));
 
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<TotpCredential> getByUserId(
-            @PathVariable Long userId) {
+        TotpCredential credential =
+                totpCredentialRepository
+                        .findByUserId(user.getId())
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "TOTP setup has not been started"
+                                ));
 
-        return totpCredentialService.getByUserId(userId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
-    }
+        if (credential.isEnabled()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "TOTP is already enabled"
+            );
+        }
 
-    @PutMapping
-    public TotpCredential updateTotpCredential(
-            @RequestBody TotpCredential credential) {
-        return totpCredentialService.updateTotpCredential(credential);
-    }
+        boolean valid =
+                totpService.verifyCode(
+                        credential.getSecret(),
+                        request.getCode()
+                );
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTotpCredential(
-            @PathVariable Long id) {
+       if (!valid) {
 
-        totpCredentialService.deleteTotpCredential(id);
-        return ResponseEntity.noContent().build();
+    auditLogService.createAuditLog(
+            new AuditLog(
+                    username,
+                    "TOTP_VERIFICATION_FAILED",
+                    "Invalid TOTP code",
+                    LocalDateTime.now()
+            )
+    );
+
+    throw new ResponseStatusException(
+            HttpStatus.UNAUTHORIZED,
+            "Invalid TOTP code"
+    );
+}
+
+        credential.setEnabled(true);
+totpCredentialRepository.save(credential);
+
+auditLogService.createAuditLog(
+        new AuditLog(
+                username,
+                "TOTP_VERIFICATION_SUCCESS",
+                "TOTP enabled successfully",
+                LocalDateTime.now()
+        )
+);
+
+return "TOTP enabled successfully";
     }
 }

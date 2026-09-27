@@ -30,53 +30,129 @@ public class JwtService {
     }
 
     /**
-     * Generates a pre-auth token (before TOTP verification).
-     * totpVerified = false — only valid for the /api/auth/verify-totp call.
+     * Generates a short-lived pre-authentication token.
+     *
+     * Password authentication has succeeded,
+     * but TPM and TOTP have not yet been completed.
      */
-    public String generatePreAuthToken(UserDetails userDetails) {
+    public String generatePreAuthToken(
+            UserDetails userDetails) {
+
         Map<String, Object> claims = new HashMap<>();
+
+        claims.put("tpmVerified", false);
         claims.put("totpVerified", false);
-        return buildToken(claims, userDetails.getUsername(), 5 * 60 * 1000L); // 5 min
+
+        return buildToken(
+                claims,
+                userDetails.getUsername(),
+                5 * 60 * 1000L
+        );
     }
 
     /**
-     * Generates the final fully-authenticated token after TOTP verification.
-     * totpVerified = true — accepted by all protected endpoints.
+     * Generates a short-lived token after successful TPM verification.
+     *
+     * TPM authentication has succeeded,
+     * but TOTP has not yet been completed.
      */
-    public String generateToken(UserDetails userDetails) {
+    public String generateTpmVerifiedToken(
+            UserDetails userDetails) {
+
         Map<String, Object> claims = new HashMap<>();
-        claims.put("totpVerified", true);
-        return buildToken(claims, userDetails.getUsername(), expirationMs);
+
+        claims.put("tpmVerified", true);
+        claims.put("totpVerified", false);
+
+        return buildToken(
+                claims,
+                userDetails.getUsername(),
+                5 * 60 * 1000L
+        );
     }
 
-    private String buildToken(Map<String, Object> claims, String subject, long ttlMs) {
+    /**
+     * Generates the final fully authenticated token.
+     *
+     * Both TPM and TOTP verification have succeeded.
+     */
+    public String generateToken(
+            UserDetails userDetails) {
+
+        Map<String, Object> claims = new HashMap<>();
+
+        claims.put("tpmVerified", true);
+        claims.put("totpVerified", true);
+
+        return buildToken(
+                claims,
+                userDetails.getUsername(),
+                expirationMs
+        );
+    }
+
+    private String buildToken(
+            Map<String, Object> claims,
+            String subject,
+            long ttlMs) {
+
         return Jwts.builder()
                 .claims(claims)
                 .subject(subject)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + ttlMs))
+                .expiration(
+                        new Date(
+                                System.currentTimeMillis()
+                                        + ttlMs
+                        )
+                )
                 .signWith(getSigningKey())
                 .compact();
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        return extractClaim(
+                token,
+                Claims::getSubject
+        );
     }
 
     public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        return extractClaim(
+                token,
+                Claims::getExpiration
+        );
     }
 
-    public boolean isTotpVerified(String token) {
-        Object val = extractAllClaims(token).get("totpVerified");
+    public boolean isTpmVerified(String token) {
+
+        Object val =
+                extractAllClaims(token)
+                        .get("tpmVerified");
+
         return Boolean.TRUE.equals(val);
     }
 
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-        return claimsResolver.apply(extractAllClaims(token));
+    public boolean isTotpVerified(String token) {
+
+        Object val =
+                extractAllClaims(token)
+                        .get("totpVerified");
+
+        return Boolean.TRUE.equals(val);
+    }
+
+    public <T> T extractClaim(
+            String token,
+            Function<Claims, T> claimsResolver) {
+
+        return claimsResolver.apply(
+                extractAllClaims(token)
+        );
     }
 
     private Claims extractAllClaims(String token) {
+
         return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
@@ -85,11 +161,20 @@ public class JwtService {
     }
 
     public boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+
+        return extractExpiration(token)
+                .before(new Date());
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        String username = extractUsername(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    public boolean isTokenValid(
+            String token,
+            UserDetails userDetails) {
+
+        String username =
+                extractUsername(token);
+
+        return username.equals(
+                userDetails.getUsername()
+        ) && !isTokenExpired(token);
     }
 }

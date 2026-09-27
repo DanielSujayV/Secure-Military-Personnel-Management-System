@@ -6,6 +6,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -49,10 +50,10 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
 
-                .cors(cors -> cors.disable())
+                // Enable the CORS configuration from CorsConfig.java
+                .cors(Customizer.withDefaults())
 
                 .formLogin(form -> form.disable())
-
                 .httpBasic(basic -> basic.disable())
 
                 .sessionManagement(session ->
@@ -63,23 +64,53 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // Authentication
+                        // ==============================
+                        // AUTHENTICATION
+                        // ==============================
+
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/login"
-                        ).permitAll()
-
-                        .requestMatchers("/api/auth/**")
+                        )
                         .permitAll()
 
-                        // ADMIN ONLY
+                        .requestMatchers(
+                                "/api/auth/**"
+                        )
+                        .permitAll()
+
+                        // Allow Spring Boot error handling
+                        // to return the original controller status code.
+                        .requestMatchers(
+                                "/error"
+                        )
+                        .permitAll()
+
+                        // ==============================
+                        // USERS - ADMIN ONLY
+                        // ==============================
+
                         .requestMatchers(
                                 "/api/users",
                                 "/api/users/**"
                         )
                         .hasAuthority("ROLE_ADMIN")
 
-                        // ADMIN + COMMANDER + OFFICER
+                        // ==============================
+                        // ROLES - ADMIN ONLY
+                        // ==============================
+
+                        .requestMatchers(
+                                "/api/roles",
+                                "/api/roles/**"
+                        )
+                        .hasAuthority("ROLE_ADMIN")
+
+                        // ==============================
+                        // PERSONNEL
+                        // ADMIN + COMMANDER + OFFICER + PERSONNEL
+                        // ==============================
+
                         .requestMatchers(
                                 "/api/personnel",
                                 "/api/personnel/**"
@@ -87,10 +118,26 @@ public class SecurityConfig {
                         .hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER",
-                                "ROLE_OFFICER"
+                                "ROLE_OFFICER",
+                                "ROLE_PERSONNEL"
                         )
 
-                        // ADMIN + COMMANDER + OFFICER
+                        // ==============================
+                        // LEAVE APPROVAL / REJECTION
+                        // COMMANDER ONLY
+                        // ==============================
+
+                        .requestMatchers(
+                                "/api/leave-requests/*/approve",
+                                "/api/leave-requests/*/reject"
+                        )
+                        .hasAuthority("ROLE_COMMANDER")
+
+                        // ==============================
+                        // LEAVE REQUESTS
+                        // ADMIN + COMMANDER + OFFICER + PERSONNEL
+                        // ==============================
+
                         .requestMatchers(
                                 "/api/leave-requests",
                                 "/api/leave-requests/**"
@@ -98,10 +145,15 @@ public class SecurityConfig {
                         .hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER",
-                                "ROLE_OFFICER"
+                                "ROLE_OFFICER",
+                                "ROLE_PERSONNEL"
                         )
 
+                        // ==============================
+                        // PROMOTIONS
                         // ADMIN + COMMANDER
+                        // ==============================
+
                         .requestMatchers(
                                 "/api/promotions",
                                 "/api/promotions/**"
@@ -111,7 +163,11 @@ public class SecurityConfig {
                                 "ROLE_COMMANDER"
                         )
 
+                        // ==============================
+                        // UNITS
                         // ADMIN + COMMANDER
+                        // ==============================
+
                         .requestMatchers(
                                 "/api/units",
                                 "/api/units/**"
@@ -121,11 +177,26 @@ public class SecurityConfig {
                                 "ROLE_COMMANDER"
                         )
 
-                        // Everything else requires login
+                        // ==============================
+                        // AUDIT LOGS
+                        // ADMIN ONLY
+                        // ==============================
+
+                        .requestMatchers(
+                                "/api/audit-logs",
+                                "/api/audit-logs/**"
+                        )
+                        .hasAuthority("ROLE_ADMIN")
+
+                        // ==============================
+                        // EVERYTHING ELSE
+                        // ==============================
+
                         .anyRequest()
                         .authenticated()
                 )
 
+                // JWT authentication
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class

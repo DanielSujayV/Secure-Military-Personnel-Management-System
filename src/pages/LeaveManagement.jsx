@@ -1,50 +1,144 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function LeaveManagement() {
-  const [leaves, setLeaves] = useState([
-    {
-      id: "L001",
-      personnel: "Arun Kumar",
-      serviceNo: "MP001",
-      type: "Casual Leave",
-      from: "2026-08-20",
-      to: "2026-08-22",
-      reason: "Personal reasons",
-      status: "Pending",
-    },
-    {
-      id: "L002",
-      personnel: "Ravi Sharma",
-      serviceNo: "MP002",
-      type: "Annual Leave",
-      from: "2026-09-01",
-      to: "2026-09-07",
-      reason: "Family visit",
-      status: "Approved",
-    },
-    {
-      id: "L003",
-      personnel: "Vikram Singh",
-      serviceNo: "MP003",
-      type: "Medical Leave",
-      from: "2026-08-15",
-      to: "2026-08-18",
-      reason: "Medical treatment",
-      status: "Rejected",
-    },
-  ]);
+  const API_BASE_URL = "http://localhost:8080/api";
+
+  const [leaves, setLeaves] = useState([]);
+  const [personnelList, setPersonnelList] = useState([]);
 
   const [showForm, setShowForm] = useState(false);
   const [viewingLeave, setViewingLeave] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
   const [formData, setFormData] = useState({
-    personnel: "",
-    serviceNo: "",
+    personnelId: "",
     type: "",
     from: "",
     to: "",
     reason: "",
   });
+
+  const getHeaders = () => {
+    const token = localStorage.getItem("token");
+
+    return {
+      "Content-Type": "application/json",
+      ...(token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {}),
+    };
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [leaveResponse, personnelResponse] =
+        await Promise.all([
+          fetch(`${API_BASE_URL}/leave-requests`, {
+            method: "GET",
+            headers: getHeaders(),
+          }),
+
+          fetch(`${API_BASE_URL}/personnel`, {
+            method: "GET",
+            headers: getHeaders(),
+          }),
+        ]);
+
+      if (!leaveResponse.ok) {
+        throw new Error(
+          `Failed to load leave requests (${leaveResponse.status})`
+        );
+      }
+
+      if (!personnelResponse.ok) {
+        throw new Error(
+          `Failed to load personnel (${personnelResponse.status})`
+        );
+      }
+
+      const leaveData = await leaveResponse.json();
+      const personnelData = await personnelResponse.json();
+
+      setLeaves(leaveData);
+      setPersonnelList(personnelData);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message || "Failed to load leave data."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  /*
+   * Because the backend currently has no separate leaveType field,
+   * new requests store the type together with the reason.
+   *
+   * Example:
+   * "Casual Leave | Personal reasons"
+   */
+  const buildReason = () => {
+    if (!formData.type) {
+      return formData.reason;
+    }
+
+    return `${formData.type} | ${formData.reason}`;
+  };
+
+  const parseReason = (reason) => {
+    if (!reason) {
+      return {
+        type: "—",
+        reason: "",
+      };
+    }
+
+    const separator = " | ";
+
+    if (reason.includes(separator)) {
+      const parts = reason.split(separator);
+
+      return {
+        type: parts[0],
+        reason: parts.slice(1).join(separator),
+      };
+    }
+
+    return {
+      type: "—",
+      reason,
+    };
+  };
+
+  const formatLeave = (leave) => {
+    const parsed = parseReason(leave.reason);
+
+    return {
+      ...leave,
+      type: parsed.type,
+      displayReason: parsed.reason,
+      personnelName:
+        leave.personnel?.fullName || "Unknown",
+      serviceNo:
+        leave.personnel?.serviceNumber || "—",
+    };
+  };
+
+  const formattedLeaves = leaves.map(formatLeave);
 
   const handleChange = (e) => {
     setFormData({
@@ -53,67 +147,263 @@ function LeaveManagement() {
     });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const newLeave = {
-      id: `L${String(leaves.length + 1).padStart(3, "0")}`,
-      ...formData,
-      status: "Pending",
-    };
-
-    setLeaves([...leaves, newLeave]);
-
+  const openAddForm = () => {
     setFormData({
-      personnel: "",
-      serviceNo: "",
+      personnelId: "",
       type: "",
       from: "",
       to: "",
       reason: "",
     });
 
-    setShowForm(false);
+    setError("");
+    setShowForm(true);
   };
 
-  const updateStatus = (id, status) => {
-    setLeaves(
-      leaves.map((leave) =>
-        leave.id === id
-          ? { ...leave, status }
-          : leave
-      )
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.personnelId) {
+      setError("Please select personnel.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const selectedPersonnel = personnelList.find(
+        (person) =>
+          String(person.id) ===
+          String(formData.personnelId)
+      );
+
+      if (!selectedPersonnel) {
+        throw new Error(
+          "Selected personnel could not be found."
+        );
+      }
+
+      const payload = {
+        personnel: {
+          id: selectedPersonnel.id,
+        },
+        startDate: formData.from,
+        endDate: formData.to,
+        reason: buildReason(),
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}/leave-requests`,
+        {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        let message =
+          "Failed to submit leave application.";
+
+        try {
+          const errorData = await response.json();
+
+          message =
+            errorData.message ||
+            errorData.error ||
+            message;
+        } catch {
+          // Ignore non-JSON response.
+        }
+
+        throw new Error(message);
+      }
+
+      const createdLeave =
+        await response.json();
+
+      setLeaves((current) => [
+        ...current,
+        createdLeave,
+      ]);
+
+      setFormData({
+        personnelId: "",
+        type: "",
+        from: "",
+        to: "",
+        reason: "",
+      });
+
+      setShowForm(false);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Failed to submit leave application."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateStatus = async (id, status) => {
+    try {
+      setError("");
+
+      const endpoint =
+        status === "APPROVED"
+          ? "approve"
+          : "reject";
+
+      const response = await fetch(
+        `${API_BASE_URL}/leave-requests/${id}/${endpoint}`,
+        {
+          method: "PUT",
+          headers: getHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        let message =
+          status === "APPROVED"
+            ? "Failed to approve leave request."
+            : "Failed to reject leave request.";
+
+        try {
+          const errorData = await response.json();
+
+          message =
+            errorData.message ||
+            errorData.error ||
+            message;
+        } catch {
+          // Ignore non-JSON response.
+        }
+
+        throw new Error(message);
+      }
+
+      const updatedLeave =
+        await response.json();
+
+      setLeaves((current) =>
+        current.map((leave) =>
+          leave.id === updatedLeave.id
+            ? updatedLeave
+            : leave
+        )
+      );
+
+      setViewingLeave(null);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Failed to update leave request."
+      );
+    }
+  };
+
+  const handleDelete = async (leave) => {
+    const confirmed = window.confirm(
+      `Delete leave request #${leave.id}?`
     );
 
-    setViewingLeave(null);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/leave-requests/${leave.id}`,
+        {
+          method: "DELETE",
+          headers: getHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        let message =
+          "Failed to delete leave request.";
+
+        try {
+          const errorData = await response.json();
+
+          message =
+            errorData.message ||
+            errorData.error ||
+            message;
+        } catch {
+          // Ignore non-JSON response.
+        }
+
+        throw new Error(message);
+      }
+
+      setLeaves((current) =>
+        current.filter(
+          (item) => item.id !== leave.id
+        )
+      );
+
+      setViewingLeave(null);
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.message ||
+          "Failed to delete leave request."
+      );
+    }
   };
 
   return (
     <div className="personnel-page">
 
       <div className="page-header">
+
         <div>
           <h1>Leave Management</h1>
+
           <p>
-            Manage personnel leave applications and approvals.
+            Manage personnel leave applications
+            and approvals.
           </p>
         </div>
 
         <button
           className="primary-button"
-          onClick={() => setShowForm(true)}
+          onClick={openAddForm}
         >
           + Apply for Leave
         </button>
+
       </div>
 
+      {error && (
+        <div
+          className="login-error"
+          style={{ marginBottom: "20px" }}
+        >
+          {error}
+        </div>
+      )}
 
       {showForm && (
+
         <div className="form-card">
 
           <div className="form-card-header">
+
             <div>
               <h2>Apply for Leave</h2>
+
               <p>
                 Enter the leave application details.
               </p>
@@ -125,8 +415,8 @@ function LeaveManagement() {
             >
               ×
             </button>
-          </div>
 
+          </div>
 
           <form onSubmit={handleSubmit}>
 
@@ -135,30 +425,29 @@ function LeaveManagement() {
               <div className="input-group">
                 <label>Personnel Name</label>
 
-                <input
-                  type="text"
-                  name="personnel"
-                  value={formData.personnel}
+                <select
+                  name="personnelId"
+                  value={formData.personnelId}
                   onChange={handleChange}
-                  placeholder="Enter personnel name"
                   required
-                />
+                >
+                  <option value="">
+                    Select Personnel
+                  </option>
+
+                  {personnelList.map(
+                    (person) => (
+                      <option
+                        key={person.id}
+                        value={person.id}
+                      >
+                        {person.fullName} (
+                        {person.serviceNumber})
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
-
-
-              <div className="input-group">
-                <label>Service Number</label>
-
-                <input
-                  type="text"
-                  name="serviceNo"
-                  value={formData.serviceNo}
-                  onChange={handleChange}
-                  placeholder="e.g. MP004"
-                  required
-                />
-              </div>
-
 
               <div className="input-group">
                 <label>Leave Type</label>
@@ -187,7 +476,6 @@ function LeaveManagement() {
                 </select>
               </div>
 
-
               <div className="input-group">
                 <label>From</label>
 
@@ -200,7 +488,6 @@ function LeaveManagement() {
                 />
               </div>
 
-
               <div className="input-group">
                 <label>To</label>
 
@@ -212,7 +499,6 @@ function LeaveManagement() {
                   required
                 />
               </div>
-
 
               <div className="input-group">
                 <label>Reason</label>
@@ -229,13 +515,14 @@ function LeaveManagement() {
 
             </div>
 
-
             <div className="form-actions">
 
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setShowForm(false)}
+                onClick={() =>
+                  setShowForm(false)
+                }
               >
                 Cancel
               </button>
@@ -243,8 +530,11 @@ function LeaveManagement() {
               <button
                 type="submit"
                 className="primary-button"
+                disabled={saving}
               >
-                Submit Application
+                {saving
+                  ? "Submitting..."
+                  : "Submit Application"}
               </button>
 
             </div>
@@ -252,8 +542,8 @@ function LeaveManagement() {
           </form>
 
         </div>
-      )}
 
+      )}
 
       <div className="table-card">
 
@@ -269,85 +559,118 @@ function LeaveManagement() {
 
         </div>
 
-
         <div className="table-container">
 
-          <table>
+          {loading ? (
+            <p>Loading leave applications...</p>
+          ) : (
 
-            <thead>
-              <tr>
-                <th>Request ID</th>
-                <th>Personnel</th>
-                <th>Leave Type</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
+            <table>
 
-
-            <tbody>
-
-              {leaves.map((leave) => (
-
-                <tr key={leave.id}>
-
-                  <td>
-                    <strong>{leave.id}</strong>
-                  </td>
-
-                  <td>
-                    {leave.personnel}
-                    <br />
-                    <small>{leave.serviceNo}</small>
-                  </td>
-
-                  <td>{leave.type}</td>
-
-                  <td>{leave.from}</td>
-
-                  <td>{leave.to}</td>
-
-                  <td>
-                    <span
-                      className={`status-badge ${
-                        leave.status === "Approved"
-                          ? "active"
-                          : leave.status === "Pending"
-                          ? "pending"
-                          : "inactive"
-                      }`}
-                    >
-                      {leave.status}
-                    </span>
-                  </td>
-
-                  <td>
-
-                    <button
-                      className="view-button"
-                      onClick={() =>
-                        setViewingLeave(leave)
-                      }
-                    >
-                      Review
-                    </button>
-
-                  </td>
-
+              <thead>
+                <tr>
+                  <th>Request ID</th>
+                  <th>Personnel</th>
+                  <th>Leave Type</th>
+                  <th>From</th>
+                  <th>To</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
+              </thead>
 
-              ))}
+              <tbody>
 
-            </tbody>
+                {formattedLeaves.length === 0 ? (
 
-          </table>
+                  <tr>
+                    <td colSpan="7">
+                      No leave applications found.
+                    </td>
+                  </tr>
+
+                ) : (
+
+                  formattedLeaves.map(
+                    (leave) => (
+
+                      <tr key={leave.id}>
+
+                        <td>
+                          <strong>
+                            {leave.id}
+                          </strong>
+                        </td>
+
+                        <td>
+                          {leave.personnelName}
+                          <br />
+                          <small>
+                            {leave.serviceNo}
+                          </small>
+                        </td>
+
+                        <td>
+                          {leave.type}
+                        </td>
+
+                        <td>
+                          {leave.startDate}
+                        </td>
+
+                        <td>
+                          {leave.endDate}
+                        </td>
+
+                        <td>
+
+                          <span
+                            className={`status-badge ${
+                              leave.status ===
+                              "APPROVED"
+                                ? "active"
+                                : leave.status ===
+                                  "PENDING"
+                                ? "pending"
+                                : "inactive"
+                            }`}
+                          >
+                            {leave.status}
+                          </span>
+
+                        </td>
+
+                        <td>
+
+                          <button
+                            className="view-button"
+                            onClick={() =>
+                              setViewingLeave(
+                                leave
+                              )
+                            }
+                          >
+                            Review
+                          </button>
+
+                        </td>
+
+                      </tr>
+
+                    )
+                  )
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          )}
 
         </div>
 
       </div>
-
 
       {viewingLeave && (
 
@@ -361,7 +684,8 @@ function LeaveManagement() {
                 <h2>Leave Request</h2>
 
                 <p>
-                  Request ID: {viewingLeave.id}
+                  Request ID:{" "}
+                  {viewingLeave.id}
                 </p>
               </div>
 
@@ -376,18 +700,19 @@ function LeaveManagement() {
 
             </div>
 
-
             <div className="details-grid">
 
               <div>
                 <span>Personnel</span>
+
                 <strong>
-                  {viewingLeave.personnel}
+                  {viewingLeave.personnelName}
                 </strong>
               </div>
 
               <div>
                 <span>Service Number</span>
+
                 <strong>
                   {viewingLeave.serviceNo}
                 </strong>
@@ -395,6 +720,7 @@ function LeaveManagement() {
 
               <div>
                 <span>Leave Type</span>
+
                 <strong>
                   {viewingLeave.type}
                 </strong>
@@ -402,27 +728,31 @@ function LeaveManagement() {
 
               <div>
                 <span>From</span>
+
                 <strong>
-                  {viewingLeave.from}
+                  {viewingLeave.startDate}
                 </strong>
               </div>
 
               <div>
                 <span>To</span>
+
                 <strong>
-                  {viewingLeave.to}
+                  {viewingLeave.endDate}
                 </strong>
               </div>
 
               <div>
                 <span>Reason</span>
+
                 <strong>
-                  {viewingLeave.reason}
+                  {viewingLeave.displayReason}
                 </strong>
               </div>
 
               <div>
                 <span>Current Status</span>
+
                 <strong>
                   {viewingLeave.status}
                 </strong>
@@ -430,8 +760,8 @@ function LeaveManagement() {
 
             </div>
 
-
-            {viewingLeave.status === "Pending" && (
+            {viewingLeave.status ===
+              "PENDING" && (
 
               <div className="modal-actions">
 
@@ -440,7 +770,7 @@ function LeaveManagement() {
                   onClick={() =>
                     updateStatus(
                       viewingLeave.id,
-                      "Rejected"
+                      "REJECTED"
                     )
                   }
                 >
@@ -452,7 +782,7 @@ function LeaveManagement() {
                   onClick={() =>
                     updateStatus(
                       viewingLeave.id,
-                      "Approved"
+                      "APPROVED"
                     )
                   }
                 >
@@ -462,6 +792,28 @@ function LeaveManagement() {
               </div>
 
             )}
+
+            <div className="modal-actions">
+
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  handleDelete(viewingLeave)
+                }
+              >
+                Delete
+              </button>
+
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  setViewingLeave(null)
+                }
+              >
+                Close
+              </button>
+
+            </div>
 
           </div>
 

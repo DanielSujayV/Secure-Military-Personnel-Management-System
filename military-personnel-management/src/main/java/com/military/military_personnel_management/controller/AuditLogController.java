@@ -17,10 +17,7 @@ public class AuditLogController {
         this.auditLogService = auditLogService;
     }
 
-    @PostMapping
-    public AuditLog createAuditLog(@RequestBody AuditLog auditLog) {
-        return auditLogService.createAuditLog(auditLog);
-    }
+   
 
     @GetMapping
     public List<AuditLog> getAllAuditLogs() {
@@ -36,11 +33,5 @@ public class AuditLogController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteAuditLog(
-            @PathVariable Long id) {
-
-        auditLogService.deleteAuditLog(id);
-        return ResponseEntity.noContent().build();
-    }
+    
 }

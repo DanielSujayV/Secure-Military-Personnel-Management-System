@@ -1,54 +1,112 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function Personnel() {
-  const [personnel, setPersonnel] = useState([
-    {
-      id: "MP001",
-      name: "Arun Kumar",
-      rank: "Major",
-      unit: "Unit A1",
-      joiningDate: "2019-06-12",
-      contact: "9876543210",
-      status: "Active",
-    },
-    {
-      id: "MP002",
-      name: "Ravi Sharma",
-      rank: "Captain",
-      unit: "Unit B2",
-      joiningDate: "2021-03-18",
-      contact: "9876543211",
-      status: "Active",
-    },
-    {
-      id: "MP003",
-      name: "Vikram Singh",
-      rank: "Lieutenant",
-      unit: "Unit A1",
-      joiningDate: "2022-09-05",
-      contact: "9876543212",
-      status: "On Leave",
-    },
-  ]);
+  const [personnel, setPersonnel] = useState([]);
+  const [units, setUnits] = useState([]);
 
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [viewingPerson, setViewingPerson] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
   const [formData, setFormData] = useState({
-    id: "",
-    name: "",
+    id: null,
+    serviceNumber: "",
+    fullName: "",
     rank: "",
-    unit: "",
-    joiningDate: "",
-    contact: "",
-    status: "Active",
+    unitId: "",
+    phone: "",
+    email: "",
   });
 
+  const API_BASE_URL = "http://localhost:8080/api";
+
+  const getHeaders = () => {
+    const token = localStorage.getItem("token");
+
+    return {
+      "Content-Type": "application/json",
+      ...(token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {}),
+    };
+  };
+
+  const loadPersonnel = async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/personnel`,
+      {
+        method: "GET",
+        headers: getHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load personnel (${response.status})`
+      );
+    }
+
+    return response.json();
+  };
+
+  const loadUnits = async () => {
+    const response = await fetch(
+      `${API_BASE_URL}/units`,
+      {
+        method: "GET",
+        headers: getHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load units (${response.status})`
+      );
+    }
+
+    return response.json();
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [personnelData, unitsData] = await Promise.all([
+          loadPersonnel(),
+          loadUnits(),
+        ]);
+
+        setPersonnel(personnelData);
+        setUnits(unitsData);
+      } catch (err) {
+        console.error(err);
+        setError(
+          err.message || "Failed to load personnel data."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
   const filteredPersonnel = personnel.filter((person) =>
-    person.name.toLowerCase().includes(search.toLowerCase()) ||
-    person.id.toLowerCase().includes(search.toLowerCase())
+    (person.fullName || "")
+      .toLowerCase()
+      .includes(search.toLowerCase()) ||
+    (person.serviceNumber || "")
+      .toLowerCase()
+      .includes(search.toLowerCase())
   );
 
   const handleChange = (e) => {
@@ -62,49 +120,208 @@ function Personnel() {
     setEditingPerson(null);
 
     setFormData({
-      id: "",
-      name: "",
+      id: null,
+      serviceNumber: "",
+      fullName: "",
       rank: "",
-      unit: "",
-      joiningDate: "",
-      contact: "",
-      status: "Active",
+      unitId: "",
+      phone: "",
+      email: "",
     });
 
+    setError("");
     setShowForm(true);
   };
 
   const openEditForm = (person) => {
     setEditingPerson(person);
-    setFormData(person);
+
+    setFormData({
+      id: person.id,
+      serviceNumber: person.serviceNumber || "",
+      fullName: person.fullName || "",
+      rank: person.rank || "",
+      unitId: person.unit?.id
+        ? String(person.unit.id)
+        : "",
+      phone: person.phone || "",
+      email: person.email || "",
+    });
+
+    setError("");
     setShowForm(true);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (editingPerson) {
-      setPersonnel(
-        personnel.map((person) =>
-          person.id === editingPerson.id ? formData : person
-        )
-      );
-    } else {
-      setPersonnel([...personnel, formData]);
+    if (!formData.unitId) {
+      setError("Please select a unit.");
+      return;
     }
 
-    setFormData({
-      id: "",
-      name: "",
-      rank: "",
-      unit: "",
-      joiningDate: "",
-      contact: "",
-      status: "Active",
-    });
+    try {
+      setSaving(true);
+      setError("");
 
-    setEditingPerson(null);
-    setShowForm(false);
+      const payload = {
+        serviceNumber: formData.serviceNumber,
+        fullName: formData.fullName,
+        rank: formData.rank,
+        phone: formData.phone,
+        email: formData.email,
+        unit: {
+          id: Number(formData.unitId),
+        },
+      };
+
+      let response;
+
+      if (editingPerson) {
+        payload.id = editingPerson.id;
+
+        response = await fetch(
+          `${API_BASE_URL}/personnel`,
+          {
+            method: "PUT",
+            headers: getHeaders(),
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        response = await fetch(
+          `${API_BASE_URL}/personnel`,
+          {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      if (!response.ok) {
+        let message =
+          editingPerson
+            ? "Failed to update personnel."
+            : "Failed to create personnel.";
+
+        try {
+          const errorData = await response.json();
+
+          message =
+            errorData.message ||
+            errorData.error ||
+            message;
+        } catch {
+          // Ignore non-JSON error response.
+        }
+
+        throw new Error(message);
+      }
+
+      const savedPerson = await response.json();
+
+      if (editingPerson) {
+        setPersonnel((current) =>
+          current.map((person) =>
+            person.id === editingPerson.id
+              ? savedPerson
+              : person
+          )
+        );
+      } else {
+        setPersonnel((current) => [
+          ...current,
+          savedPerson,
+        ]);
+      }
+
+      setFormData({
+        id: null,
+        serviceNumber: "",
+        fullName: "",
+        rank: "",
+        unitId: "",
+        phone: "",
+        email: "",
+      });
+
+      setEditingPerson(null);
+      setShowForm(false);
+    } catch (err) {
+      console.error(err);
+      setError(
+        err.message || "Failed to save personnel."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  const handleDelete = async (person) => {
+  const confirmed = window.confirm(
+    `Are you sure you want to delete ${person.fullName}?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setError("");
+
+    const response = await fetch(
+      `${API_BASE_URL}/personnel/${person.id}`,
+      {
+        method: "DELETE",
+        headers: getHeaders(),
+      }
+    );
+
+    if (!response.ok) {
+      let message = "Failed to delete personnel.";
+
+      try {
+        const errorData = await response.json();
+
+        message =
+          errorData.message ||
+          errorData.error ||
+          message;
+      } catch {
+        // Ignore non-JSON error response.
+      }
+
+      throw new Error(message);
+    }
+
+    setPersonnel((current) =>
+      current.filter(
+        (personItem) => personItem.id !== person.id
+      )
+    );
+
+    if (
+      viewingPerson &&
+      viewingPerson.id === person.id
+    ) {
+      setViewingPerson(null);
+    }
+
+  } catch (err) {
+    console.error(err);
+
+    setError(
+      err.message || "Failed to delete personnel."
+    );
+  }
+};
+
+  const getUnitName = (unit) => {
+    if (!unit) {
+      return "—";
+    }
+
+    return unit.unitName || "—";
   };
 
   return (
@@ -116,6 +333,7 @@ function Personnel() {
 
         <div>
           <h1>Personnel Management</h1>
+
           <p>
             Manage military personnel records and assignments.
           </p>
@@ -130,6 +348,16 @@ function Personnel() {
 
       </div>
 
+      {/* ERROR MESSAGE */}
+
+      {error && (
+        <div
+          className="login-error"
+          style={{ marginBottom: "20px" }}
+        >
+          {error}
+        </div>
+      )}
 
       {/* ADD / EDIT FORM */}
 
@@ -162,7 +390,6 @@ function Personnel() {
 
           </div>
 
-
           <form onSubmit={handleSubmit}>
 
             <div className="form-grid">
@@ -172,8 +399,8 @@ function Personnel() {
 
                 <input
                   type="text"
-                  name="id"
-                  value={formData.id}
+                  name="serviceNumber"
+                  value={formData.serviceNumber}
                   onChange={handleChange}
                   disabled={editingPerson !== null}
                   placeholder="e.g. MP004"
@@ -181,20 +408,18 @@ function Personnel() {
                 />
               </div>
 
-
               <div className="input-group">
                 <label>Full Name</label>
 
                 <input
                   type="text"
-                  name="name"
-                  value={formData.name}
+                  name="fullName"
+                  value={formData.fullName}
                   onChange={handleChange}
                   placeholder="Enter full name"
                   required
                 />
               </div>
-
 
               <div className="input-group">
                 <label>Rank</label>
@@ -205,97 +430,78 @@ function Personnel() {
                   onChange={handleChange}
                   required
                 >
-                  <option value="">Select Rank</option>
+                  <option value="">
+                    Select Rank
+                  </option>
+
                   <option value="Lieutenant">
                     Lieutenant
                   </option>
+
                   <option value="Captain">
                     Captain
                   </option>
+
                   <option value="Major">
                     Major
                   </option>
+
                   <option value="Colonel">
                     Colonel
                   </option>
                 </select>
               </div>
 
-
               <div className="input-group">
                 <label>Unit</label>
 
                 <select
-                  name="unit"
-                  value={formData.unit}
+                  name="unitId"
+                  value={formData.unitId}
                   onChange={handleChange}
                   required
                 >
-                  <option value="">Select Unit</option>
-                  <option value="Unit A1">
-                    Unit A1
+                  <option value="">
+                    Select Unit
                   </option>
-                  <option value="Unit B2">
-                    Unit B2
-                  </option>
-                  <option value="Unit C3">
-                    Unit C3
-                  </option>
+
+                  {units.map((unit) => (
+                    <option
+                      key={unit.id}
+                      value={unit.id}
+                    >
+                      {unit.unitName}
+                    </option>
+                  ))}
                 </select>
               </div>
-
-
-              <div className="input-group">
-                <label>Date of Joining</label>
-
-                <input
-                  type="date"
-                  name="joiningDate"
-                  value={formData.joiningDate}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
 
               <div className="input-group">
                 <label>Contact Number</label>
 
                 <input
                   type="tel"
-                  name="contact"
-                  value={formData.contact}
+                  name="phone"
+                  value={formData.phone}
                   onChange={handleChange}
                   placeholder="Enter contact number"
                   required
                 />
               </div>
 
-
               <div className="input-group">
-                <label>Status</label>
+                <label>Email</label>
 
-                <select
-                  name="status"
-                  value={formData.status}
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleChange}
-                >
-                  <option value="Active">
-                    Active
-                  </option>
-
-                  <option value="On Leave">
-                    On Leave
-                  </option>
-
-                  <option value="Inactive">
-                    Inactive
-                  </option>
-                </select>
+                  placeholder="Enter email address"
+                />
               </div>
 
             </div>
-
 
             <div className="form-actions">
 
@@ -310,10 +516,13 @@ function Personnel() {
               <button
                 type="submit"
                 className="primary-button"
+                disabled={saving}
               >
-                {editingPerson
-                  ? "Save Changes"
-                  : "Add Personnel"}
+                {saving
+                  ? "Saving..."
+                  : editingPerson
+                    ? "Save Changes"
+                    : "Add Personnel"}
               </button>
 
             </div>
@@ -323,7 +532,6 @@ function Personnel() {
         </div>
 
       )}
-
 
       {/* PERSONNEL TABLE */}
 
@@ -339,109 +547,132 @@ function Personnel() {
             </span>
           </div>
 
-
           <input
             className="search-input"
             type="text"
             placeholder="Search by name or service number..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) =>
+              setSearch(e.target.value)
+            }
           />
 
         </div>
 
-
         <div className="table-container">
 
-          <table>
+          {loading ? (
+            <p>Loading personnel...</p>
+          ) : (
 
-            <thead>
+            <table>
 
-              <tr>
-                <th>Service No.</th>
-                <th>Name</th>
-                <th>Rank</th>
-                <th>Unit</th>
-                <th>Joining Date</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
+              <thead>
 
-            </thead>
-
-
-            <tbody>
-
-              {filteredPersonnel.map((person) => (
-
-                <tr key={person.id}>
-
-                  <td>
-                    <strong>
-                      {person.id}
-                    </strong>
-                  </td>
-
-                  <td>{person.name}</td>
-
-                  <td>{person.rank}</td>
-
-                  <td>{person.unit}</td>
-
-                  <td>{person.joiningDate}</td>
-
-                  <td>
-
-                    <span
-                      className={`status-badge ${
-                        person.status === "Active"
-                          ? "active"
-                          : "inactive"
-                      }`}
-                    >
-                      {person.status}
-                    </span>
-
-                  </td>
-
-                  <td>
-
-                    <div className="action-buttons">
-
-                      <button
-                        className="view-button"
-                        onClick={() =>
-                          setViewingPerson(person)
-                        }
-                      >
-                        View
-                      </button>
-
-                      <button
-                        className="edit-button"
-                        onClick={() =>
-                          openEditForm(person)
-                        }
-                      >
-                        Edit
-                      </button>
-
-                    </div>
-
-                  </td>
-
+                <tr>
+                  <th>Service No.</th>
+                  <th>Name</th>
+                  <th>Rank</th>
+                  <th>Unit</th>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>Action</th>
                 </tr>
 
-              ))}
+              </thead>
 
-            </tbody>
+              <tbody>
 
-          </table>
+                {filteredPersonnel.length === 0 ? (
+
+                  <tr>
+                    <td colSpan="7">
+                      No personnel records found.
+                    </td>
+                  </tr>
+
+                ) : (
+
+                  filteredPersonnel.map((person) => (
+
+                    <tr key={person.id}>
+
+                      <td>
+                        <strong>
+                          {person.serviceNumber}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {person.fullName}
+                      </td>
+
+                      <td>
+                        {person.rank || "—"}
+                      </td>
+
+                      <td>
+                        {getUnitName(person.unit)}
+                      </td>
+
+                      <td>
+                        {person.phone || "—"}
+                      </td>
+
+                      <td>
+                        {person.email || "—"}
+                      </td>
+
+                      <td>
+
+                        <div className="action-buttons">
+
+  <button
+    className="view-button"
+    onClick={() =>
+      setViewingPerson(person)
+    }
+  >
+    View
+  </button>
+
+  <button
+    className="edit-button"
+    onClick={() =>
+      openEditForm(person)
+    }
+  >
+    Edit
+  </button>
+
+  <button
+    className="delete-button"
+    onClick={() =>
+      handleDelete(person)
+    }
+  >
+    Delete
+  </button>
+
+</div>
+
+                      </td>
+
+                    </tr>
+
+                  ))
+
+                )}
+
+              </tbody>
+
+            </table>
+
+          )}
 
         </div>
 
       </div>
-
 
       {/* VIEW PERSONNEL MODAL */}
 
@@ -457,7 +688,8 @@ function Personnel() {
                 <h2>Personnel Details</h2>
 
                 <p>
-                  Service Number: {viewingPerson.id}
+                  Service Number:{" "}
+                  {viewingPerson.serviceNumber}
                 </p>
               </div>
 
@@ -472,53 +704,44 @@ function Personnel() {
 
             </div>
 
-
             <div className="details-grid">
 
               <div>
                 <span>Full Name</span>
                 <strong>
-                  {viewingPerson.name}
+                  {viewingPerson.fullName}
                 </strong>
               </div>
 
               <div>
                 <span>Rank</span>
                 <strong>
-                  {viewingPerson.rank}
+                  {viewingPerson.rank || "—"}
                 </strong>
               </div>
 
               <div>
                 <span>Unit</span>
                 <strong>
-                  {viewingPerson.unit}
+                  {getUnitName(viewingPerson.unit)}
                 </strong>
               </div>
 
               <div>
-                <span>Date of Joining</span>
+                <span>Phone</span>
                 <strong>
-                  {viewingPerson.joiningDate}
+                  {viewingPerson.phone || "—"}
                 </strong>
               </div>
 
               <div>
-                <span>Contact</span>
+                <span>Email</span>
                 <strong>
-                  {viewingPerson.contact}
-                </strong>
-              </div>
-
-              <div>
-                <span>Status</span>
-                <strong>
-                  {viewingPerson.status}
+                  {viewingPerson.email || "—"}
                 </strong>
               </div>
 
             </div>
-
 
             <div className="modal-actions">
 

@@ -28,44 +28,61 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.userDetailsService = userDetailsService;
     }
 
-    @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain)
-            throws ServletException, IOException {
+@Override
+protected void doFilterInternal(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        FilterChain filterChain)
+        throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+    final String authHeader = request.getHeader("Authorization");
 
-        String username = null;
-        String jwt = null;
+    String username = null;
+    String jwt = null;
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+    if (authHeader != null && authHeader.startsWith("Bearer ")) {
 
-            jwt = authHeader.substring(7);
+        jwt = authHeader.substring(7);
 
-            try {
-                username = jwtService.extractUsername(jwt);
-            } catch (Exception e) {
-                // Invalid or malformed JWT — skip authentication
-            }
+        try {
+            username = jwtService.extractUsername(jwt);
+        } catch (Exception e) {
+            // Invalid or malformed JWT — skip authentication
         }
+    }
 
-        if (username != null &&
-                SecurityContextHolder.getContext().getAuthentication() == null) {
+    if (username != null &&
+            SecurityContextHolder.getContext().getAuthentication() == null) {
+
+        try {
 
             UserDetails userDetails =
                     userDetailsService.loadUserByUsername(username);
 
             if (jwtService.isTokenValid(jwt, userDetails)) {
 
-                // For all non-auth endpoints, require a fully verified (post-TOTP) token
                 String path = request.getRequestURI();
-                boolean isAuthPath = path.startsWith("/api/auth/");
 
-                if (!isAuthPath && !jwtService.isTotpVerified(jwt)) {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.getWriter().write("{\"error\":\"TOTP verification required\"}");
+                // Authentication endpoints are allowed to handle
+                // pre-authentication tokens.
+                boolean isAuthPath =
+                        path.startsWith("/api/auth/");
+
+                // Every non-authentication endpoint requires
+                // a fully verified TOTP token.
+                if (!isAuthPath
+                        && !jwtService.isTotpVerified(jwt)) {
+
+                    response.setStatus(
+                            HttpServletResponse.SC_UNAUTHORIZED
+                    );
+
+                    response.setContentType("application/json");
+
+                    response.getWriter().write(
+                            "{\"error\":\"TOTP verification required\"}"
+                    );
+
                     return;
                 }
 
@@ -84,8 +101,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext()
                         .setAuthentication(authentication);
             }
-        }
 
-        filterChain.doFilter(request, response);
+        } catch (Exception e) {
+            // Invalid token or user — leave the request unauthenticated.
+       SecurityContextHolder.clearContext();
+        }
     }
+
+    filterChain.doFilter(request, response);
+}
 }

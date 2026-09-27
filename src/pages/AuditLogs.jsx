@@ -1,78 +1,100 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../services/api";
 
 function AuditLogs() {
-  const [logs] = useState([
-    {
-      id: "LOG001",
-      timestamp: "2026-08-14 10:42:15",
-      user: "admin",
-      role: "Administrator",
-      action: "PERSONNEL_CREATED",
-      description: "Added personnel record MP004",
-      status: "Success",
-    },
-    {
-      id: "LOG002",
-      timestamp: "2026-08-14 10:18:32",
-      user: "commander01",
-      role: "Commander",
-      action: "LEAVE_APPROVED",
-      description: "Approved leave request L002",
-      status: "Success",
-    },
-    {
-      id: "LOG003",
-      timestamp: "2026-08-14 09:55:21",
-      user: "admin",
-      role: "Administrator",
-      action: "UNIT_UPDATED",
-      description: "Updated unit information U002",
-      status: "Success",
-    },
-    {
-      id: "LOG004",
-      timestamp: "2026-08-14 09:31:08",
-      user: "officer02",
-      role: "Officer",
-      action: "LOGIN",
-      description: "User successfully authenticated",
-      status: "Success",
-    },
-    {
-      id: "LOG005",
-      timestamp: "2026-08-14 09:12:44",
-      user: "unknown",
-      role: "Unknown",
-      action: "LOGIN_FAILED",
-      description: "Failed authentication attempt",
-      status: "Failed",
-    },
-    {
-      id: "LOG006",
-      timestamp: "2026-08-14 08:48:19",
-      user: "admin",
-      role: "Administrator",
-      action: "PROMOTION_UPDATED",
-      description: "Updated promotion record PR002",
-      status: "Success",
-    },
-  ]);
-
+  const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("All");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadAuditLogs();
+  }, []);
+
+  const loadAuditLogs = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await api.get("/audit-logs");
+
+      setLogs(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Failed to load audit logs:", err);
+      setError(err.message || "Failed to load audit logs.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) {
+      return "—";
+    }
+
+    try {
+      const date = new Date(timestamp);
+
+      if (Number.isNaN(date.getTime())) {
+        return timestamp;
+      }
+
+      return date.toLocaleString();
+    } catch {
+      return timestamp;
+    }
+  };
+
+  const getStatus = (action) => {
+    if (!action) {
+      return "Success";
+    }
+
+    const normalizedAction = action.toUpperCase();
+
+    if (
+      normalizedAction.includes("FAILED") ||
+      normalizedAction.includes("FAIL")
+    ) {
+      return "Failed";
+    }
+
+    return "Success";
+  };
 
   const filteredLogs = logs.filter((log) => {
+    const username = log.username || "";
+    const action = log.action || "";
+    const details = log.details || "";
+
     const matchesSearch =
-      log.user.toLowerCase().includes(search.toLowerCase()) ||
-      log.action.toLowerCase().includes(search.toLowerCase()) ||
-      log.description.toLowerCase().includes(search.toLowerCase());
+      username.toLowerCase().includes(search.toLowerCase()) ||
+      action.toLowerCase().includes(search.toLowerCase()) ||
+      details.toLowerCase().includes(search.toLowerCase());
 
     const matchesAction =
       actionFilter === "All" ||
-      log.action === actionFilter;
+      action === actionFilter;
 
     return matchesSearch && matchesAction;
   });
+
+  const successfulEvents = logs.filter(
+    (log) => getStatus(log.action) === "Success"
+  ).length;
+
+  const failedEvents = logs.filter(
+    (log) => getStatus(log.action) === "Failed"
+  ).length;
+
+  const availableActions = [
+    ...new Set(
+      logs
+        .map((log) => log.action)
+        .filter(Boolean)
+    ),
+  ];
 
   return (
     <div className="personnel-page">
@@ -86,7 +108,6 @@ function AuditLogs() {
         </div>
       </div>
 
-
       <div className="audit-summary">
 
         <div className="audit-stat">
@@ -96,24 +117,15 @@ function AuditLogs() {
 
         <div className="audit-stat">
           <span>Successful Events</span>
-          <strong>
-            {logs.filter(
-              (log) => log.status === "Success"
-            ).length}
-          </strong>
+          <strong>{successfulEvents}</strong>
         </div>
 
         <div className="audit-stat">
           <span>Failed Events</span>
-          <strong>
-            {logs.filter(
-              (log) => log.status === "Failed"
-            ).length}
-          </strong>
+          <strong>{failedEvents}</strong>
         </div>
 
       </div>
-
 
       <div className="table-card">
 
@@ -126,7 +138,6 @@ function AuditLogs() {
               {filteredLogs.length} events displayed
             </span>
           </div>
-
 
           <div className="audit-filters">
 
@@ -151,101 +162,124 @@ function AuditLogs() {
                 All Actions
               </option>
 
-              <option value="LOGIN">
-                Login
-              </option>
-
-              <option value="LOGIN_FAILED">
-                Failed Login
-              </option>
-
-              <option value="PERSONNEL_CREATED">
-                Personnel Created
-              </option>
-
-              <option value="UNIT_UPDATED">
-                Unit Updated
-              </option>
-
-              <option value="LEAVE_APPROVED">
-                Leave Approved
-              </option>
-
-              <option value="PROMOTION_UPDATED">
-                Promotion Updated
-              </option>
+              {availableActions.map((action) => (
+                <option
+                  key={action}
+                  value={action}
+                >
+                  {action}
+                </option>
+              ))}
             </select>
 
           </div>
 
         </div>
 
+        {loading && (
+          <div style={{ padding: "20px" }}>
+            Loading audit logs...
+          </div>
+        )}
 
-        <div className="table-container">
+        {error && !loading && (
+          <div
+            style={{
+              padding: "20px",
+              color: "#b91c1c",
+            }}
+          >
+            {error}
+          </div>
+        )}
 
-          <table>
+        {!loading && !error && (
+          <div className="table-container">
 
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Role</th>
-                <th>Action</th>
-                <th>Description</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+            <table>
 
-
-            <tbody>
-
-              {filteredLogs.map((log) => (
-
-                <tr key={log.id}>
-
-                  <td>
-                    <span className="timestamp">
-                      {log.timestamp}
-                    </span>
-                  </td>
-
-                  <td>
-                    <strong>{log.user}</strong>
-                  </td>
-
-                  <td>{log.role}</td>
-
-                  <td>
-                    <span className="action-badge">
-                      {log.action}
-                    </span>
-                  </td>
-
-                  <td>{log.description}</td>
-
-                  <td>
-
-                    <span
-                      className={`status-badge ${
-                        log.status === "Success"
-                          ? "active"
-                          : "inactive"
-                      }`}
-                    >
-                      {log.status}
-                    </span>
-
-                  </td>
-
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Action</th>
+                  <th>Description</th>
+                  <th>Status</th>
                 </tr>
+              </thead>
 
-              ))}
+              <tbody>
 
-            </tbody>
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="6"
+                      style={{
+                        textAlign: "center",
+                        padding: "20px",
+                      }}
+                    >
+                      No audit logs found.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((log) => {
 
-          </table>
+                    const status = getStatus(log.action);
 
-        </div>
+                    return (
+                      <tr key={log.id}>
+
+                        <td>
+                          <span className="timestamp">
+                            {formatTimestamp(log.timestamp)}
+                          </span>
+                        </td>
+
+                        <td>
+                          <strong>
+                            {log.username || "—"}
+                          </strong>
+                        </td>
+
+                        <td>
+                          —
+                        </td>
+
+                        <td>
+                          <span className="action-badge">
+                            {log.action || "—"}
+                          </span>
+                        </td>
+
+                        <td>
+                          {log.details || "—"}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`status-badge ${
+                              status === "Success"
+                                ? "active"
+                                : "inactive"
+                            }`}
+                          >
+                            {status}
+                          </span>
+                        </td>
+
+                      </tr>
+                    );
+                  })
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+        )}
 
       </div>
 

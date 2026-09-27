@@ -1,59 +1,89 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../services/api";
 
 function Promotions() {
-  const [promotions, setPromotions] = useState([
-    {
-      id: "PR001",
-      serviceNo: "MP001",
-      personnel: "Arun Kumar",
-      previousRank: "Captain",
-      newRank: "Major",
-      date: "2026-07-15",
-      status: "Approved",
-    },
-    {
-      id: "PR002",
-      serviceNo: "MP002",
-      personnel: "Ravi Sharma",
-      previousRank: "Lieutenant",
-      newRank: "Captain",
-      date: "2026-08-01",
-      status: "Pending",
-    },
-    {
-      id: "PR003",
-      serviceNo: "MP003",
-      personnel: "Vikram Singh",
-      previousRank: "Lieutenant",
-      newRank: "Captain",
-      date: "2026-06-20",
-      status: "Approved",
-    },
-  ]);
+  const [promotions, setPromotions] = useState([]);
+  const [personnelList, setPersonnelList] = useState([]);
 
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState(null);
   const [viewingPromotion, setViewingPromotion] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
   const [formData, setFormData] = useState({
-    serviceNo: "",
-    personnel: "",
+    personnelId: "",
     previousRank: "",
     newRank: "",
-    date: "",
-    status: "Pending",
+    promotionDate: "",
+    remarks: "",
   });
 
-  const filteredPromotions = promotions.filter(
-    (promotion) =>
-      promotion.personnel
-        .toLowerCase()
-        .includes(search.toLowerCase()) ||
-      promotion.serviceNo
-        .toLowerCase()
-        .includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [promotionData, personnelData] =
+        await Promise.all([
+          api.get("/promotions"),
+          api.get("/personnel"),
+        ]);
+
+      setPromotions(promotionData);
+      setPersonnelList(personnelData);
+
+    } catch (err) {
+      console.error(
+        "Failed to load promotions:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Failed to load promotion records."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredPromotions =
+    promotions.filter((promotion) => {
+      const personnel = promotion.personnel;
+
+      const person =
+        personnelList.find(
+          (item) =>
+            Number(item.id) ===
+            Number(personnel?.id)
+        ) || personnel;
+
+      const name =
+        person?.fullName || "";
+
+      const serviceNumber =
+        person?.serviceNumber || "";
+
+      const searchText =
+        search.toLowerCase();
+
+      return (
+        name
+          .toLowerCase()
+          .includes(searchText) ||
+        serviceNumber
+          .toLowerCase()
+          .includes(searchText)
+      );
+    });
 
   const handleChange = (e) => {
     setFormData({
@@ -66,88 +96,225 @@ function Promotions() {
     setEditingPromotion(null);
 
     setFormData({
-      serviceNo: "",
-      personnel: "",
+      personnelId: "",
       previousRank: "",
       newRank: "",
-      date: "",
-      status: "Pending",
+      promotionDate: "",
+      remarks: "",
     });
 
     setShowForm(true);
+    setError("");
   };
 
   const openEditForm = (promotion) => {
     setEditingPromotion(promotion);
 
     setFormData({
-      serviceNo: promotion.serviceNo,
-      personnel: promotion.personnel,
-      previousRank: promotion.previousRank,
-      newRank: promotion.newRank,
-      date: promotion.date,
-      status: promotion.status,
+      personnelId:
+        promotion.personnel?.id || "",
+      previousRank:
+        promotion.previousRank || "",
+      newRank:
+        promotion.newRank || "",
+      promotionDate:
+        promotion.promotionDate || "",
+      remarks:
+        promotion.remarks || "",
     });
 
     setShowForm(true);
+    setError("");
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (editingPromotion) {
-      setPromotions(
-        promotions.map((promotion) =>
-          promotion.id === editingPromotion.id
-            ? {
-                ...promotion,
-                ...formData,
-              }
-            : promotion
-        )
-      );
-    } else {
-      const newPromotion = {
-        id: `PR${String(promotions.length + 1).padStart(3, "0")}`,
-        ...formData,
-      };
-
-      setPromotions([...promotions, newPromotion]);
+    if (!formData.personnelId) {
+      setError("Please select personnel.");
+      return;
     }
 
-    setFormData({
-      serviceNo: "",
-      personnel: "",
-      previousRank: "",
-      newRank: "",
-      date: "",
-      status: "Pending",
-    });
+    try {
+      setSaving(true);
+      setError("");
 
-    setEditingPromotion(null);
-    setShowForm(false);
+      const promotionData = {
+        personnel: {
+          id: Number(
+            formData.personnelId
+          ),
+        },
+
+        previousRank:
+          formData.previousRank,
+
+        newRank:
+          formData.newRank,
+
+        promotionDate:
+          formData.promotionDate,
+
+        remarks:
+          formData.remarks,
+      };
+
+      if (editingPromotion) {
+        const updatedPromotion =
+          await api.put(
+            "/promotions",
+            {
+              id:
+                editingPromotion.id,
+              ...promotionData,
+            }
+          );
+
+        setPromotions(
+          promotions.map(
+            (promotion) =>
+              promotion.id ===
+              editingPromotion.id
+                ? updatedPromotion
+                : promotion
+          )
+        );
+
+      } else {
+        const newPromotion =
+          await api.post(
+            "/promotions",
+            promotionData
+          );
+
+        setPromotions([
+          ...promotions,
+          newPromotion,
+        ]);
+      }
+
+      setFormData({
+        personnelId: "",
+        previousRank: "",
+        newRank: "",
+        promotionDate: "",
+        remarks: "",
+      });
+
+      setEditingPromotion(null);
+      setShowForm(false);
+
+    } catch (err) {
+      console.error(
+        "Failed to save promotion:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Failed to save promotion."
+      );
+
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const updateStatus = (id, status) => {
-    setPromotions(
-      promotions.map((promotion) =>
-        promotion.id === id
-          ? { ...promotion, status }
-          : promotion
-      )
-    );
+  const handleDelete = async (id) => {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to delete this promotion record?"
+      );
 
-    setViewingPromotion(null);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      await api.delete(
+        `/promotions/${id}`
+      );
+
+      setPromotions(
+        (currentPromotions) =>
+          currentPromotions.filter(
+            (promotion) =>
+              promotion.id !== id
+          )
+      );
+
+      if (
+        viewingPromotion?.id === id
+      ) {
+        setViewingPromotion(null);
+      }
+
+    } catch (err) {
+      console.error(
+        "Failed to delete promotion:",
+        err
+      );
+
+      setError(
+        err.message ||
+          "Failed to delete promotion."
+      );
+    }
+  };
+
+  const getPersonnel = (personnel) => {
+    if (!personnel) {
+      return null;
+    }
+
+    return (
+      personnelList.find(
+        (item) =>
+          Number(item.id) ===
+          Number(personnel.id)
+      ) || personnel
+    );
+  };
+
+  const getPersonnelName = (
+    personnel
+  ) => {
+    const person =
+      getPersonnel(personnel);
+
+    return (
+      person?.fullName ||
+      "Unknown"
+    );
+  };
+
+  const getServiceNumber = (
+    personnel
+  ) => {
+    const person =
+      getPersonnel(personnel);
+
+    return (
+      person?.serviceNumber ||
+      "—"
+    );
   };
 
   return (
     <div className="personnel-page">
 
       <div className="page-header">
+
         <div>
-          <h1>Promotion Management</h1>
+          <h1>
+            Promotion Management
+          </h1>
+
           <p>
-            Manage personnel promotions and rank history.
+            Manage personnel promotions
+            and rank history.
           </p>
         </div>
 
@@ -157,9 +324,17 @@ function Promotions() {
         >
           + Add Promotion
         </button>
+
       </div>
 
+      {error && (
+        <div className="login-error">
+          {error}
+        </div>
+      )}
+
       {showForm && (
+
         <div className="form-card">
 
           <div className="form-card-header">
@@ -172,107 +347,204 @@ function Promotions() {
               </h2>
 
               <p>
-                Enter the promotion details below.
+                Enter the promotion
+                details below.
               </p>
             </div>
 
             <button
               className="close-button"
-              onClick={() => setShowForm(false)}
+              onClick={() =>
+                setShowForm(false)
+              }
             >
               ×
             </button>
 
           </div>
 
-          <form onSubmit={handleSubmit}>
+          <form
+            onSubmit={handleSubmit}
+          >
 
             <div className="form-grid">
 
               <div className="input-group">
-                <label>Service Number</label>
 
-                <input
-                  type="text"
-                  name="serviceNo"
-                  value={formData.serviceNo}
-                  onChange={handleChange}
-                  placeholder="e.g. MP004"
+                <label>
+                  Personnel
+                </label>
+
+                <select
+                  name="personnelId"
+                  value={
+                    formData.personnelId
+                  }
+                  onChange={
+                    handleChange
+                  }
                   required
-                />
+                >
+
+                  <option value="">
+                    Select Personnel
+                  </option>
+
+                  {personnelList.map(
+                    (personnel) => (
+
+                      <option
+                        key={
+                          personnel.id
+                        }
+                        value={
+                          personnel.id
+                        }
+                      >
+                        {
+                          personnel.serviceNumber
+                        }{" "}
+                        -{" "}
+                        {
+                          personnel.fullName
+                        }
+                      </option>
+
+                    )
+                  )}
+
+                </select>
+
               </div>
 
               <div className="input-group">
-                <label>Personnel Name</label>
 
-                <input
-                  type="text"
-                  name="personnel"
-                  value={formData.personnel}
-                  onChange={handleChange}
-                  placeholder="Enter personnel name"
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Previous Rank</label>
+                <label>
+                  Previous Rank
+                </label>
 
                 <select
                   name="previousRank"
-                  value={formData.previousRank}
-                  onChange={handleChange}
+                  value={
+                    formData.previousRank
+                  }
+                  onChange={
+                    handleChange
+                  }
                   required
                 >
-                  <option value="">Select Rank</option>
-                  <option value="Lieutenant">Lieutenant</option>
-                  <option value="Captain">Captain</option>
-                  <option value="Major">Major</option>
-                  <option value="Colonel">Colonel</option>
+
+                  <option value="">
+                    Select Rank
+                  </option>
+
+                  <option value="Lieutenant">
+                    Lieutenant
+                  </option>
+
+                  <option value="Captain">
+                    Captain
+                  </option>
+
+                  <option value="Major">
+                    Major
+                  </option>
+
+                  <option value="Colonel">
+                    Colonel
+                  </option>
+
+                  <option value="General">
+                    General
+                  </option>
+
                 </select>
+
               </div>
 
               <div className="input-group">
-                <label>New Rank</label>
+
+                <label>
+                  New Rank
+                </label>
 
                 <select
                   name="newRank"
-                  value={formData.newRank}
-                  onChange={handleChange}
+                  value={
+                    formData.newRank
+                  }
+                  onChange={
+                    handleChange
+                  }
                   required
                 >
-                  <option value="">Select Rank</option>
-                  <option value="Captain">Captain</option>
-                  <option value="Major">Major</option>
-                  <option value="Colonel">Colonel</option>
-                  <option value="General">General</option>
+
+                  <option value="">
+                    Select Rank
+                  </option>
+
+                  <option value="Lieutenant">
+                    Lieutenant
+                  </option>
+
+                  <option value="Captain">
+                    Captain
+                  </option>
+
+                  <option value="Major">
+                    Major
+                  </option>
+
+                  <option value="Colonel">
+                    Colonel
+                  </option>
+
+                  <option value="General">
+                    General
+                  </option>
+
                 </select>
+
               </div>
 
               <div className="input-group">
-                <label>Promotion Date</label>
+
+                <label>
+                  Promotion Date
+                </label>
 
                 <input
                   type="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleChange}
+                  name="promotionDate"
+                  value={
+                    formData.promotionDate
+                  }
+                  onChange={
+                    handleChange
+                  }
                   required
                 />
+
               </div>
 
               <div className="input-group">
-                <label>Status</label>
 
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleChange}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
+                <label>
+                  Remarks
+                </label>
+
+                <input
+                  type="text"
+                  name="remarks"
+                  value={
+                    formData.remarks
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  placeholder="Enter remarks"
+                />
+
               </div>
 
             </div>
@@ -282,7 +554,9 @@ function Promotions() {
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setShowForm(false)}
+                onClick={() =>
+                  setShowForm(false)
+                }
               >
                 Cancel
               </button>
@@ -290,8 +564,11 @@ function Promotions() {
               <button
                 type="submit"
                 className="primary-button"
+                disabled={saving}
               >
-                {editingPromotion
+                {saving
+                  ? "Saving..."
+                  : editingPromotion
                   ? "Save Changes"
                   : "Add Promotion"}
               </button>
@@ -299,7 +576,9 @@ function Promotions() {
             </div>
 
           </form>
+
         </div>
+
       )}
 
       <div className="table-card">
@@ -307,10 +586,13 @@ function Promotions() {
         <div className="table-toolbar">
 
           <div>
-            <h2>Promotion Records</h2>
+            <h2>
+              Promotion Records
+            </h2>
 
             <span>
-              {promotions.length} promotion records
+              {promotions.length}{" "}
+              promotion records
             </span>
           </div>
 
@@ -319,7 +601,11 @@ function Promotions() {
             type="text"
             placeholder="Search by name or service number..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) =>
+              setSearch(
+                e.target.value
+              )
+            }
           />
 
         </div>
@@ -329,80 +615,170 @@ function Promotions() {
           <table>
 
             <thead>
+
               <tr>
-                <th>Record ID</th>
-                <th>Personnel</th>
-                <th>Previous Rank</th>
-                <th>New Rank</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th>
+                  Record ID
+                </th>
+
+                <th>
+                  Personnel
+                </th>
+
+                <th>
+                  Previous Rank
+                </th>
+
+                <th>
+                  New Rank
+                </th>
+
+                <th>
+                  Date
+                </th>
+
+                <th>
+                  Remarks
+                </th>
+
+                <th>
+                  Action
+                </th>
               </tr>
+
             </thead>
 
             <tbody>
 
-              {filteredPromotions.map((promotion) => (
+              {loading ? (
 
-                <tr key={promotion.id}>
-
-                  <td>
-                    <strong>{promotion.id}</strong>
+                <tr>
+                  <td colSpan="7">
+                    Loading promotion
+                    records...
                   </td>
-
-                  <td>
-                    {promotion.personnel}
-                    <br />
-                    <small>{promotion.serviceNo}</small>
-                  </td>
-
-                  <td>{promotion.previousRank}</td>
-
-                  <td>{promotion.newRank}</td>
-
-                  <td>{promotion.date}</td>
-
-                  <td>
-                    <span
-                      className={`status-badge ${
-                        promotion.status === "Approved"
-                          ? "active"
-                          : promotion.status === "Pending"
-                          ? "pending"
-                          : "inactive"
-                      }`}
-                    >
-                      {promotion.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    <div className="action-buttons">
-
-                      <button
-                        className="view-button"
-                        onClick={() =>
-                          setViewingPromotion(promotion)
-                        }
-                      >
-                        View
-                      </button>
-
-                      <button
-                        className="edit-button"
-                        onClick={() =>
-                          openEditForm(promotion)
-                        }
-                      >
-                        Edit
-                      </button>
-
-                    </div>
-                  </td>
-
                 </tr>
 
-              ))}
+              ) : filteredPromotions.length === 0 ? (
+
+                <tr>
+                  <td colSpan="7">
+                    No promotion
+                    records found.
+                  </td>
+                </tr>
+
+              ) : (
+
+                filteredPromotions.map(
+                  (promotion) => (
+
+                    <tr
+                      key={
+                        promotion.id
+                      }
+                    >
+
+                      <td>
+                        <strong>
+                          {
+                            promotion.id
+                          }
+                        </strong>
+                      </td>
+
+                      <td>
+
+                        {
+                          getPersonnelName(
+                            promotion.personnel
+                          )
+                        }
+
+                        <br />
+
+                        <small>
+                          {
+                            getServiceNumber(
+                              promotion.personnel
+                            )
+                          }
+                        </small>
+
+                      </td>
+
+                      <td>
+                        {
+                          promotion.previousRank
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          promotion.newRank
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          promotion.promotionDate
+                        }
+                      </td>
+
+                      <td>
+                        {
+                          promotion.remarks ||
+                          "—"
+                        }
+                      </td>
+
+                      <td>
+
+                        <div className="action-buttons">
+
+                          <button
+                            className="view-button"
+                            onClick={() =>
+                              setViewingPromotion(
+                                promotion
+                              )
+                            }
+                          >
+                            View
+                          </button>
+
+                          <button
+                            className="edit-button"
+                            onClick={() =>
+                              openEditForm(
+                                promotion
+                              )
+                            }
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="delete-button"
+                            onClick={() =>
+                              handleDelete(
+                                promotion.id
+                              )
+                            }
+                          >
+                            Delete
+                          </button>
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+
+                  )
+                )
+
+              )}
 
             </tbody>
 
@@ -421,17 +797,26 @@ function Promotions() {
             <div className="modal-header">
 
               <div>
-                <h2>Promotion Details</h2>
+
+                <h2>
+                  Promotion Details
+                </h2>
 
                 <p>
-                  Record ID: {viewingPromotion.id}
+                  Record ID:{" "}
+                  {
+                    viewingPromotion.id
+                  }
                 </p>
+
               </div>
 
               <button
                 className="close-button"
                 onClick={() =>
-                  setViewingPromotion(null)
+                  setViewingPromotion(
+                    null
+                  )
                 }
               >
                 ×
@@ -442,80 +827,124 @@ function Promotions() {
             <div className="details-grid">
 
               <div>
-                <span>Personnel</span>
+                <span>
+                  Personnel
+                </span>
+
                 <strong>
-                  {viewingPromotion.personnel}
+                  {
+                    getPersonnelName(
+                      viewingPromotion.personnel
+                    )
+                  }
                 </strong>
               </div>
 
               <div>
-                <span>Service Number</span>
+                <span>
+                  Service Number
+                </span>
+
                 <strong>
-                  {viewingPromotion.serviceNo}
+                  {
+                    getServiceNumber(
+                      viewingPromotion.personnel
+                    )
+                  }
                 </strong>
               </div>
 
               <div>
-                <span>Previous Rank</span>
+                <span>
+                  Previous Rank
+                </span>
+
                 <strong>
-                  {viewingPromotion.previousRank}
+                  {
+                    viewingPromotion.previousRank
+                  }
                 </strong>
               </div>
 
               <div>
-                <span>New Rank</span>
+                <span>
+                  New Rank
+                </span>
+
                 <strong>
-                  {viewingPromotion.newRank}
+                  {
+                    viewingPromotion.newRank
+                  }
                 </strong>
               </div>
 
               <div>
-                <span>Promotion Date</span>
+                <span>
+                  Promotion Date
+                </span>
+
                 <strong>
-                  {viewingPromotion.date}
+                  {
+                    viewingPromotion.promotionDate
+                  }
                 </strong>
               </div>
 
               <div>
-                <span>Status</span>
+                <span>
+                  Remarks
+                </span>
+
                 <strong>
-                  {viewingPromotion.status}
+                  {
+                    viewingPromotion.remarks ||
+                    "—"
+                  }
                 </strong>
               </div>
 
             </div>
 
-            {viewingPromotion.status === "Pending" && (
+            <div className="modal-actions">
 
-              <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  setViewingPromotion(
+                    null
+                  )
+                }
+              >
+                Close
+              </button>
 
-                <button
-                  className="secondary-button"
-                  onClick={() =>
-                    updateStatus(
-                      viewingPromotion.id,
-                      "Rejected"
-                    )
-                  }
-                >
-                  Reject
-                </button>
+              <button
+                className="primary-button"
+                onClick={() => {
+                  openEditForm(
+                    viewingPromotion
+                  );
 
-                <button
-                  className="primary-button"
-                  onClick={() =>
-                    updateStatus(
-                      viewingPromotion.id,
-                      "Approved"
-                    )
-                  }
-                >
-                  Approve
-                </button>
+                  setViewingPromotion(
+                    null
+                  );
+                }}
+              >
+                Edit Promotion
+              </button>
 
-              </div>
+              <button
+                className="delete-button"
+                onClick={() =>
+                  handleDelete(
+                    viewingPromotion.id
+                  )
+                }
+              >
+                Delete Promotion
+              </button>
 
-            )}
+            </div>
 
           </div>
 

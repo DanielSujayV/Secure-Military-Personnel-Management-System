@@ -203,3 +203,14 @@
 
   color: #667085;
 }
+
+/* your existing Login.css styles above... */
+
+
+/* Login error message */
+.login-error {
+  color: #b91c1c;
+  margin-bottom: 15px;
+  font-size: 14px;
+  text-align: center;
+}

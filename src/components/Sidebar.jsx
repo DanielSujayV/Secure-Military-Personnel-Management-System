@@ -1,6 +1,20 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function Sidebar() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+
+    sessionStorage.removeItem("tpmChallengeId");
+    sessionStorage.removeItem("tpmDeviceId");
+    sessionStorage.removeItem("tpmChallenge");
+
+    navigate("/login");
+  };
+
   return (
     <aside className="sidebar">
 
@@ -31,8 +45,6 @@ function Sidebar() {
           Leave Management
         </NavLink>
 
-        
-
         <NavLink to="/promotions">
           Promotions
         </NavLink>
@@ -44,7 +56,15 @@ function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        Secure Administrative Portal
+        <button
+          type="button"
+          className="logout-button"
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
+
+        <span>Secure Administrative Portal</span>
       </div>
 
     </aside>
