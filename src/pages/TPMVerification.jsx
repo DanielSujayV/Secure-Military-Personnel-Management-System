@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./TOTPVerification.css";
@@ -8,69 +8,77 @@ const TPMVerification = () => {
   const { setTpmVerifiedToken } = useAuth();
   const [status, setStatus] = useState("Verifying TPM security...");
   const [error, setError] = useState("");
+  // StrictMode replays effects in development. Share one in-flight verification
+  // promise so the same one-time server challenge is not submitted twice.
+  const verificationPromiseRef = useRef(null);
 
   useEffect(() => {
-    let cancelled = false;
+    let active = true;
 
-    const verifyTPM = async () => {
-      try {
-        setError("");
-        setStatus("Verifying TPM security...");
+    const performVerification = async () => {
+      setError("");
+      setStatus("Verifying TPM security...");
 
-        const token = sessionStorage.getItem("authStageToken");
-        const challengeId = sessionStorage.getItem("tpmChallengeId");
-        const deviceId = sessionStorage.getItem("tpmDeviceId");
-        const challenge = sessionStorage.getItem("tpmChallenge");
+      const token = sessionStorage.getItem("authStageToken");
+      const challengeId = sessionStorage.getItem("tpmChallengeId");
+      const deviceId = sessionStorage.getItem("tpmDeviceId");
+      const challenge = sessionStorage.getItem("tpmChallenge");
 
-        if (!token || !challengeId || !deviceId || !challenge) {
-          throw new Error("TPM authentication session is missing. Please log in again.");
-        }
+      if (!token || !challengeId || !deviceId || !challenge) {
+        throw new Error("TPM authentication session is missing. Please log in again.");
+      }
 
-        setStatus("Authenticating with TPM...");
-        const signResponse = await fetch("http://127.0.0.1:8765/tpm/sign", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ challenge }),
-        });
-        const signData = await signResponse.json().catch(() => ({}));
-        if (!signResponse.ok || !signData.success || !signData.signature) {
-          throw new Error(signData.message || signData.error || "TPM signing failed.");
-        }
+      setStatus("Authenticating with TPM...");
+      const signResponse = await fetch("http://127.0.0.1:8765/tpm/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challenge }),
+      });
+      const signData = await signResponse.json().catch(() => ({}));
+      if (!signResponse.ok || !signData.success || !signData.signature) {
+        throw new Error(signData.message || signData.error || "TPM signing failed.");
+      }
 
-        setStatus("Verifying TPM signature...");
-        const verifyResponse = await fetch("http://localhost:8080/api/auth/verify-tpm", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ challengeId, deviceId, signature: signData.signature }),
-        });
-        const verifyData = await verifyResponse.json().catch(() => ({}));
-        if (!verifyResponse.ok) {
-          throw new Error(verifyData.message || verifyData.error || "TPM verification failed.");
-        }
-        if (!verifyData.token) throw new Error("Server did not return a TPM verification token.");
+      setStatus("Verifying TPM signature...");
+      const verifyResponse = await fetch("http://localhost:8080/api/auth/verify-tpm", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ challengeId, deviceId, signature: signData.signature }),
+      });
+      const verifyData = await verifyResponse.json().catch(() => ({}));
+      if (!verifyResponse.ok) {
+        throw new Error(verifyData.message || verifyData.error || "TPM verification failed.");
+      }
+      if (!verifyData.token) throw new Error("Server did not return a TPM verification token.");
+      return verifyData;
+    };
 
+    if (!verificationPromiseRef.current) {
+      verificationPromiseRef.current = performVerification();
+    }
+
+    verificationPromiseRef.current
+      .then((verifyData) => {
+        if (!active) return;
         setTpmVerifiedToken(verifyData.token, verifyData.username);
         sessionStorage.removeItem("tpmChallengeId");
         sessionStorage.removeItem("tpmDeviceId");
         sessionStorage.removeItem("tpmChallenge");
+        setStatus("TPM verification successful. Continuing...");
+        navigate("/verify-totp", { replace: true });
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError(err.message || "TPM verification failed.");
+        setStatus("TPM verification failed.");
+      });
 
-        if (!cancelled) {
-          setStatus("TPM verification successful. Continuing...");
-          navigate("/verify-totp", { replace: true });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "TPM verification failed.");
-          setStatus("TPM verification failed.");
-        }
-      }
+    return () => {
+      active = false;
     };
-
-    verifyTPM();
-    return () => { cancelled = true; };
   }, [navigate, setTpmVerifiedToken]);
 
   return (
