@@ -9,19 +9,11 @@ import {
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    // Only the fully verified JWT belongs in the persistent token slot.
-    const [token, setToken] = useState(
-        () => localStorage.getItem("token")
-    );
-    const [username, setUsername] = useState(
-        () => localStorage.getItem("username")
-    );
-    const [role, setRole] = useState(
-        () => localStorage.getItem("role")
-    );
-    const [roleLoading, setRoleLoading] = useState(
-        () => !!localStorage.getItem("token")
-    );
+    // Only a fully verified JWT belongs in the persistent token slot.
+    const [token, setToken] = useState(() => localStorage.getItem("token"));
+    const [username, setUsername] = useState(() => localStorage.getItem("username"));
+    const [role, setRole] = useState(() => localStorage.getItem("role"));
+    const [roleLoading, setRoleLoading] = useState(() => !!localStorage.getItem("token"));
 
     const loadRole = useCallback(async (authToken) => {
         if (!authToken) {
@@ -60,9 +52,8 @@ export const AuthProvider = ({ children }) => {
         loadRole(token);
     }, [token, loadRole]);
 
-    // Password and TPM verification tokens are deliberately kept in session
-    // state and never treated as a fully authenticated application session.
-    const beginLogin = (preAuthToken, user) => {
+    // Password/TPM tokens are transient and never treated as a full session.
+    const beginLogin = useCallback((preAuthToken, user) => {
         localStorage.removeItem("token");
         localStorage.removeItem("role");
         localStorage.setItem("username", user);
@@ -72,18 +63,18 @@ export const AuthProvider = ({ children }) => {
         setUsername(user);
         setRole(null);
         setRoleLoading(false);
-    };
+    }, []);
 
-    const setTpmVerifiedToken = (tpmToken, user) => {
+    const setTpmVerifiedToken = useCallback((tpmToken, user) => {
         sessionStorage.setItem("authStageToken", tpmToken);
         sessionStorage.setItem("authStage", "tpm");
         if (user) {
             localStorage.setItem("username", user);
             setUsername(user);
         }
-    };
+    }, []);
 
-    const completeLogin = (finalToken, user) => {
+    const completeLogin = useCallback((finalToken, user) => {
         sessionStorage.removeItem("authStageToken");
         sessionStorage.removeItem("authStage");
         localStorage.setItem("token", finalToken);
@@ -93,9 +84,9 @@ export const AuthProvider = ({ children }) => {
         setUsername(user);
         setRole(null);
         setRoleLoading(true);
-    };
+    }, []);
 
-    const logout = () => {
+    const logout = useCallback(() => {
         localStorage.removeItem("token");
         localStorage.removeItem("username");
         localStorage.removeItem("role");
@@ -108,7 +99,7 @@ export const AuthProvider = ({ children }) => {
         setUsername(null);
         setRole(null);
         setRoleLoading(false);
-    };
+    }, []);
 
     return (
         <AuthContext.Provider
