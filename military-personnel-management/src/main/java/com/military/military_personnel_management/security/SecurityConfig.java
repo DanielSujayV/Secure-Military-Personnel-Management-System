@@ -1,3 +1,4 @@
+
 package com.military.military_personnel_management.security;
 
 import org.springframework.context.annotation.Bean;
@@ -49,154 +50,107 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
-
-                // Enable the CORS configuration from CorsConfig.java
                 .cors(Customizer.withDefaults())
-
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
-
                 .authorizeHttpRequests(auth -> auth
 
-                        // ==============================
                         // AUTHENTICATION
-                        // ==============================
-
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/login"
-                        )
-                        .permitAll()
+                        ).permitAll()
 
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // SPRING BOOT ERROR HANDLING
+                        .requestMatchers("/error").permitAll()
+
+                        // ADMIN-ONLY TOTP ENROLLMENT FOR OTHER USERS
                         .requestMatchers(
-                                "/api/auth/**"
-                        )
-                        .permitAll()
+                                "/api/totp/setup-for-user",
+                                "/api/totp/confirm-for-user"
+                        ).hasAuthority("ROLE_ADMIN")
 
-                        // Allow Spring Boot error handling
-                        // to return the original controller status code.
+                        // ADMIN-ONLY TPM REGISTRATION FOR OTHER USERS
                         .requestMatchers(
-                                "/error"
-                        )
-                        .permitAll()
+                                "/api/tpm/register-for-user"
+                        ).hasAuthority("ROLE_ADMIN")
 
-                        // ==============================
                         // USERS - ADMIN ONLY
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/users",
                                 "/api/users/**"
-                        )
-                        .hasAuthority("ROLE_ADMIN")
+                        ).hasAuthority("ROLE_ADMIN")
 
-                        // ==============================
                         // ROLES - ADMIN ONLY
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/roles",
                                 "/api/roles/**"
-                        )
-                        .hasAuthority("ROLE_ADMIN")
+                        ).hasAuthority("ROLE_ADMIN")
 
-                        // ==============================
                         // PERSONNEL
-                        // ADMIN + COMMANDER + OFFICER + PERSONNEL
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/personnel",
                                 "/api/personnel/**"
-                        )
-                        .hasAnyAuthority(
+                        ).hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER",
                                 "ROLE_OFFICER",
                                 "ROLE_PERSONNEL"
                         )
 
-                        // ==============================
-                        // LEAVE APPROVAL / REJECTION
-                        // COMMANDER ONLY
-                        // ==============================
-
+                        // LEAVE APPROVAL / REJECTION - COMMANDER ONLY
                         .requestMatchers(
                                 "/api/leave-requests/*/approve",
                                 "/api/leave-requests/*/reject"
-                        )
-                        .hasAuthority("ROLE_COMMANDER")
+                        ).hasAuthority("ROLE_COMMANDER")
 
-                        // ==============================
                         // LEAVE REQUESTS
-                        // ADMIN + COMMANDER + OFFICER + PERSONNEL
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/leave-requests",
                                 "/api/leave-requests/**"
-                        )
-                        .hasAnyAuthority(
+                        ).hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER",
                                 "ROLE_OFFICER",
                                 "ROLE_PERSONNEL"
                         )
 
-                        // ==============================
                         // PROMOTIONS
-                        // ADMIN + COMMANDER
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/promotions",
                                 "/api/promotions/**"
-                        )
-                        .hasAnyAuthority(
+                        ).hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER"
                         )
 
-                        // ==============================
                         // UNITS
-                        // ADMIN + COMMANDER
-                        // ==============================
-
                         .requestMatchers(
                                 "/api/units",
                                 "/api/units/**"
-                        )
-                        .hasAnyAuthority(
+                        ).hasAnyAuthority(
                                 "ROLE_ADMIN",
                                 "ROLE_COMMANDER"
                         )
 
-                        // ==============================
-                        // AUDIT LOGS
-                        // ADMIN ONLY
-                        // ==============================
-
+                        // AUDIT LOGS - ADMIN ONLY
                         .requestMatchers(
                                 "/api/audit-logs",
                                 "/api/audit-logs/**"
-                        )
-                        .hasAuthority("ROLE_ADMIN")
+                        ).hasAuthority("ROLE_ADMIN")
 
-                        // ==============================
-                        // EVERYTHING ELSE
-                        // ==============================
-
-                        .anyRequest()
-                        .authenticated()
+                        // ALL OTHER ENDPOINTS REQUIRE AUTHENTICATION
+                        .anyRequest().authenticated()
                 )
 
-                // JWT authentication
+                // JWT AUTHENTICATION FILTER
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class

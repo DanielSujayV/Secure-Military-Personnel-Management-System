@@ -1,19 +1,10 @@
-import { useEffect, useState } from "react";
 
-function Personnel() {
-  const [personnel, setPersonnel] = useState([]);
-  const [units, setUnits] = useState([]);
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
-  const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [editingPerson, setEditingPerson] = useState(null);
-  const [viewingPerson, setViewingPerson] = useState(null);
+const API_BASE_URL = "http://localhost:8080/api";
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  const [formData, setFormData] = useState({
+const emptyForm = {
     id: null,
     serviceNumber: "",
     fullName: "",
@@ -21,759 +12,668 @@ function Personnel() {
     unitId: "",
     phone: "",
     email: "",
-  });
-
-  const API_BASE_URL = "http://localhost:8080/api";
-
-  const getHeaders = () => {
-    const token = localStorage.getItem("token");
-
-    return {
-      "Content-Type": "application/json",
-      ...(token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {}),
-    };
-  };
-
-  const loadPersonnel = async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/personnel`,
-      {
-        method: "GET",
-        headers: getHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to load personnel (${response.status})`
-      );
-    }
-
-    return response.json();
-  };
-
-  const loadUnits = async () => {
-    const response = await fetch(
-      `${API_BASE_URL}/units`,
-      {
-        method: "GET",
-        headers: getHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to load units (${response.status})`
-      );
-    }
-
-    return response.json();
-  };
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const [personnelData, unitsData] = await Promise.all([
-          loadPersonnel(),
-          loadUnits(),
-        ]);
-
-        setPersonnel(personnelData);
-        setUnits(unitsData);
-      } catch (err) {
-        console.error(err);
-        setError(
-          err.message || "Failed to load personnel data."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  const filteredPersonnel = personnel.filter((person) =>
-    (person.fullName || "")
-      .toLowerCase()
-      .includes(search.toLowerCase()) ||
-    (person.serviceNumber || "")
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const openAddForm = () => {
-    setEditingPerson(null);
-
-    setFormData({
-      id: null,
-      serviceNumber: "",
-      fullName: "",
-      rank: "",
-      unitId: "",
-      phone: "",
-      email: "",
-    });
-
-    setError("");
-    setShowForm(true);
-  };
-
-  const openEditForm = (person) => {
-    setEditingPerson(person);
-
-    setFormData({
-      id: person.id,
-      serviceNumber: person.serviceNumber || "",
-      fullName: person.fullName || "",
-      rank: person.rank || "",
-      unitId: person.unit?.id
-        ? String(person.unit.id)
-        : "",
-      phone: person.phone || "",
-      email: person.email || "",
-    });
-
-    setError("");
-    setShowForm(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.unitId) {
-      setError("Please select a unit.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-
-      const payload = {
-        serviceNumber: formData.serviceNumber,
-        fullName: formData.fullName,
-        rank: formData.rank,
-        phone: formData.phone,
-        email: formData.email,
-        unit: {
-          id: Number(formData.unitId),
-        },
-      };
-
-      let response;
-
-      if (editingPerson) {
-        payload.id = editingPerson.id;
-
-        response = await fetch(
-          `${API_BASE_URL}/personnel`,
-          {
-            method: "PUT",
-            headers: getHeaders(),
-            body: JSON.stringify(payload),
-          }
-        );
-      } else {
-        response = await fetch(
-          `${API_BASE_URL}/personnel`,
-          {
-            method: "POST",
-            headers: getHeaders(),
-            body: JSON.stringify(payload),
-          }
-        );
-      }
-
-      if (!response.ok) {
-        let message =
-          editingPerson
-            ? "Failed to update personnel."
-            : "Failed to create personnel.";
-
-        try {
-          const errorData = await response.json();
-
-          message =
-            errorData.message ||
-            errorData.error ||
-            message;
-        } catch {
-          // Ignore non-JSON error response.
-        }
-
-        throw new Error(message);
-      }
-
-      const savedPerson = await response.json();
-
-      if (editingPerson) {
-        setPersonnel((current) =>
-          current.map((person) =>
-            person.id === editingPerson.id
-              ? savedPerson
-              : person
-          )
-        );
-      } else {
-        setPersonnel((current) => [
-          ...current,
-          savedPerson,
-        ]);
-      }
-
-      setFormData({
-        id: null,
-        serviceNumber: "",
-        fullName: "",
-        rank: "",
-        unitId: "",
-        phone: "",
-        email: "",
-      });
-
-      setEditingPerson(null);
-      setShowForm(false);
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.message || "Failed to save personnel."
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-  const handleDelete = async (person) => {
-  const confirmed = window.confirm(
-    `Are you sure you want to delete ${person.fullName}?`
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
-  try {
-    setError("");
-
-    const response = await fetch(
-      `${API_BASE_URL}/personnel/${person.id}`,
-      {
-        method: "DELETE",
-        headers: getHeaders(),
-      }
-    );
-
-    if (!response.ok) {
-      let message = "Failed to delete personnel.";
-
-      try {
-        const errorData = await response.json();
-
-        message =
-          errorData.message ||
-          errorData.error ||
-          message;
-      } catch {
-        // Ignore non-JSON error response.
-      }
-
-      throw new Error(message);
-    }
-
-    setPersonnel((current) =>
-      current.filter(
-        (personItem) => personItem.id !== person.id
-      )
-    );
-
-    if (
-      viewingPerson &&
-      viewingPerson.id === person.id
-    ) {
-      setViewingPerson(null);
-    }
-
-  } catch (err) {
-    console.error(err);
-
-    setError(
-      err.message || "Failed to delete personnel."
-    );
-  }
 };
 
-  const getUnitName = (unit) => {
-    if (!unit) {
-      return "—";
-    }
+function Personnel() {
+    const { role } = useAuth();
 
-    return unit.unitName || "—";
-  };
+    const [personnel, setPersonnel] = useState([]);
+    const [units, setUnits] = useState([]);
+    const [search, setSearch] = useState("");
+    const [showForm, setShowForm] = useState(false);
+    const [editingPerson, setEditingPerson] = useState(null);
+    const [viewingPerson, setViewingPerson] = useState(null);
 
-  return (
-    <div className="personnel-page">
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const [unitsError, setUnitsError] = useState("");
 
-      {/* PAGE HEADER */}
+    // Only Admins and Commanders see personnel management controls.
+    const canManagePersonnel =
+        role === "ADMIN" || role === "COMMANDER";
 
-      <div className="page-header">
+    const getHeaders = useCallback(() => {
+        const token = localStorage.getItem("token");
 
-        <div>
-          <h1>Personnel Management</h1>
+        return {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+    }, []);
 
-          <p>
-            Manage military personnel records and assignments.
-          </p>
-        </div>
+    const loadPersonnel = useCallback(async () => {
+        const response = await fetch(`${API_BASE_URL}/personnel`, {
+            method: "GET",
+            headers: getHeaders(),
+        });
 
-        <button
-          className="primary-button"
-          onClick={openAddForm}
-        >
-          + Add Personnel
-        </button>
+        if (!response.ok) {
+            throw new Error(
+                `Failed to load personnel (${response.status})`
+            );
+        }
 
-      </div>
+        return response.json();
+    }, [getHeaders]);
 
-      {/* ERROR MESSAGE */}
+    const loadUnits = useCallback(async () => {
+        const response = await fetch(`${API_BASE_URL}/units`, {
+            method: "GET",
+            headers: getHeaders(),
+        });
 
-      {error && (
-        <div
-          className="login-error"
-          style={{ marginBottom: "20px" }}
-        >
-          {error}
-        </div>
-      )}
+        if (!response.ok) {
+            throw new Error(`Failed to load units (${response.status})`);
+        }
 
-      {/* ADD / EDIT FORM */}
+        return response.json();
+    }, [getHeaders]);
 
-      {showForm && (
+    useEffect(() => {
+        let cancelled = false;
 
-        <div className="form-card">
+        const fetchPersonnel = async () => {
+            setLoading(true);
+            setError("");
 
-          <div className="form-card-header">
+            try {
+                const data = await loadPersonnel();
 
-            <div>
-              <h2>
-                {editingPerson
-                  ? "Edit Personnel"
-                  : "Add Personnel"}
-              </h2>
-
-              <p>
-                {editingPerson
-                  ? "Update personnel information."
-                  : "Enter the personnel information below."}
-              </p>
-            </div>
-
-            <button
-              className="close-button"
-              onClick={() => setShowForm(false)}
-            >
-              ×
-            </button>
-
-          </div>
-
-          <form onSubmit={handleSubmit}>
-
-            <div className="form-grid">
-
-              <div className="input-group">
-                <label>Service Number</label>
-
-                <input
-                  type="text"
-                  name="serviceNumber"
-                  value={formData.serviceNumber}
-                  onChange={handleChange}
-                  disabled={editingPerson !== null}
-                  placeholder="e.g. MP004"
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Full Name</label>
-
-                <input
-                  type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  placeholder="Enter full name"
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Rank</label>
-
-                <select
-                  name="rank"
-                  value={formData.rank}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">
-                    Select Rank
-                  </option>
-
-                  <option value="Lieutenant">
-                    Lieutenant
-                  </option>
-
-                  <option value="Captain">
-                    Captain
-                  </option>
-
-                  <option value="Major">
-                    Major
-                  </option>
-
-                  <option value="Colonel">
-                    Colonel
-                  </option>
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Unit</label>
-
-                <select
-                  name="unitId"
-                  value={formData.unitId}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">
-                    Select Unit
-                  </option>
-
-                  {units.map((unit) => (
-                    <option
-                      key={unit.id}
-                      value={unit.id}
-                    >
-                      {unit.unitName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Contact Number</label>
-
-                <input
-                  type="tel"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="Enter contact number"
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Email</label>
-
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Enter email address"
-                />
-              </div>
-
-            </div>
-
-            <div className="form-actions">
-
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setShowForm(false)}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={saving}
-              >
-                {saving
-                  ? "Saving..."
-                  : editingPerson
-                    ? "Save Changes"
-                    : "Add Personnel"}
-              </button>
-
-            </div>
-
-          </form>
-
-        </div>
-
-      )}
-
-      {/* PERSONNEL TABLE */}
-
-      <div className="table-card">
-
-        <div className="table-toolbar">
-
-          <div>
-            <h2>Personnel Records</h2>
-
-            <span>
-              {personnel.length} registered personnel
-            </span>
-          </div>
-
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Search by name or service number..."
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
+                if (!cancelled) {
+                    setPersonnel(data);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setError(
+                        err.message || "Failed to load personnel data."
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
-          />
+        };
 
-        </div>
+        fetchPersonnel();
 
-        <div className="table-container">
+        return () => {
+            cancelled = true;
+        };
+    }, [loadPersonnel]);
 
-          {loading ? (
-            <p>Loading personnel...</p>
-          ) : (
+    useEffect(() => {
+        let cancelled = false;
 
-            <table>
+        // Units are needed for the management form, not for viewing records.
+        if (!canManagePersonnel) {
+            setUnits([]);
+            setUnitsError("");
+            return () => {
+                cancelled = true;
+            };
+        }
 
-              <thead>
+        const fetchUnits = async () => {
+            try {
+                const data = await loadUnits();
 
-                <tr>
-                  <th>Service No.</th>
-                  <th>Name</th>
-                  <th>Rank</th>
-                  <th>Unit</th>
-                  <th>Phone</th>
-                  <th>Email</th>
-                  <th>Action</th>
-                </tr>
+                if (!cancelled) {
+                    setUnits(data);
+                    setUnitsError("");
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    setUnits([]);
+                    setUnitsError(
+                        err.message || "Failed to load units."
+                    );
+                }
+            }
+        };
 
-              </thead>
+        fetchUnits();
 
-              <tbody>
+        return () => {
+            cancelled = true;
+        };
+    }, [canManagePersonnel, loadUnits]);
 
-                {filteredPersonnel.length === 0 ? (
+    const filteredPersonnel = personnel.filter((person) => {
+        const query = search.toLowerCase();
 
-                  <tr>
-                    <td colSpan="7">
-                      No personnel records found.
-                    </td>
-                  </tr>
+        return (
+            (person.fullName || "").toLowerCase().includes(query) ||
+            (person.serviceNumber || "").toLowerCase().includes(query)
+        );
+    });
 
-                ) : (
+    const handleChange = (event) => {
+        setFormData((current) => ({
+            ...current,
+            [event.target.name]: event.target.value,
+        }));
+    };
 
-                  filteredPersonnel.map((person) => (
+    const [formData, setFormData] = useState(emptyForm);
 
-                    <tr key={person.id}>
+    const openAddForm = () => {
+        if (!canManagePersonnel) return;
 
-                      <td>
-                        <strong>
-                          {person.serviceNumber}
-                        </strong>
-                      </td>
+        setEditingPerson(null);
+        setFormData({ ...emptyForm });
+        setError("");
+        setShowForm(true);
+    };
 
-                      <td>
-                        {person.fullName}
-                      </td>
+    const openEditForm = (person) => {
+        if (!canManagePersonnel) return;
 
-                      <td>
-                        {person.rank || "—"}
-                      </td>
+        setEditingPerson(person);
 
-                      <td>
-                        {getUnitName(person.unit)}
-                      </td>
+        setFormData({
+            id: person.id,
+            serviceNumber: person.serviceNumber || "",
+            fullName: person.fullName || "",
+            rank: person.rank || "",
+            unitId: person.unit?.id ? String(person.unit.id) : "",
+            phone: person.phone || "",
+            email: person.email || "",
+        });
 
-                      <td>
-                        {person.phone || "—"}
-                      </td>
+        setError("");
+        setShowForm(true);
+    };
 
-                      <td>
-                        {person.email || "—"}
-                      </td>
+    const handleSubmit = async (event) => {
+        event.preventDefault();
 
-                      <td>
+        if (!canManagePersonnel) return;
 
-                        <div className="action-buttons">
+        if (!formData.unitId) {
+            setError("Please select a unit.");
+            return;
+        }
 
-  <button
-    className="view-button"
-    onClick={() =>
-      setViewingPerson(person)
-    }
-  >
-    View
-  </button>
+        try {
+            setSaving(true);
+            setError("");
 
-  <button
-    className="edit-button"
-    onClick={() =>
-      openEditForm(person)
-    }
-  >
-    Edit
-  </button>
+            const payload = {
+                serviceNumber: formData.serviceNumber,
+                fullName: formData.fullName,
+                rank: formData.rank,
+                phone: formData.phone,
+                email: formData.email,
+                unit: {
+                    id: Number(formData.unitId),
+                },
+            };
 
-  <button
-    className="delete-button"
-    onClick={() =>
-      handleDelete(person)
-    }
-  >
-    Delete
-  </button>
+            if (editingPerson) {
+                payload.id = editingPerson.id;
+            }
 
-</div>
+            const response = await fetch(`${API_BASE_URL}/personnel`, {
+                method: editingPerson ? "PUT" : "POST",
+                headers: getHeaders(),
+                body: JSON.stringify(payload),
+            });
 
-                      </td>
+            if (!response.ok) {
+                let message = editingPerson
+                    ? "Failed to update personnel."
+                    : "Failed to create personnel.";
 
-                    </tr>
+                try {
+                    const errorData = await response.json();
+                    message =
+                        errorData.message ||
+                        errorData.error ||
+                        message;
+                } catch {
+                    // The server may return a non-JSON error response.
+                }
 
-                  ))
+                throw new Error(message);
+            }
 
+            const savedPerson = await response.json();
+
+            if (editingPerson) {
+                setPersonnel((current) =>
+                    current.map((person) =>
+                        person.id === editingPerson.id
+                            ? savedPerson
+                            : person
+                    )
+                );
+            } else {
+                setPersonnel((current) => [...current, savedPerson]);
+            }
+
+            setFormData({ ...emptyForm });
+            setEditingPerson(null);
+            setShowForm(false);
+        } catch (err) {
+            setError(err.message || "Failed to save personnel.");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (person) => {
+        if (!canManagePersonnel) return;
+
+        const confirmed = window.confirm(
+            `Are you sure you want to delete ${person.fullName}?`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setError("");
+
+            const response = await fetch(
+                `${API_BASE_URL}/personnel/${person.id}`,
+                {
+                    method: "DELETE",
+                    headers: getHeaders(),
+                }
+            );
+
+            if (!response.ok) {
+                let message = "Failed to delete personnel.";
+
+                try {
+                    const errorData = await response.json();
+                    message =
+                        errorData.message ||
+                        errorData.error ||
+                        message;
+                } catch {
+                    // The server may return a non-JSON error response.
+                }
+
+                throw new Error(message);
+            }
+
+            setPersonnel((current) =>
+                current.filter((item) => item.id !== person.id)
+            );
+
+            if (viewingPerson?.id === person.id) {
+                setViewingPerson(null);
+            }
+        } catch (err) {
+            setError(err.message || "Failed to delete personnel.");
+        }
+    };
+
+    const getUnitName = (unit) => unit?.unitName || "—";
+
+    return (
+        <div className="personnel-page">
+            <div className="page-header">
+                <div>
+                    <h1>Personnel Management</h1>
+                    <p>
+                        View military personnel records and assignments.
+                    </p>
+                </div>
+
+                {canManagePersonnel && (
+                    <button
+                        type="button"
+                        className="primary-button"
+                        onClick={openAddForm}
+                    >
+                        + Add Personnel
+                    </button>
                 )}
+            </div>
 
-              </tbody>
+            {error && (
+                <div
+                    className="login-error"
+                    style={{ marginBottom: "20px" }}
+                >
+                    {error}
+                </div>
+            )}
 
-            </table>
+            {showForm && canManagePersonnel && (
+                <div className="form-card">
+                    <div className="form-card-header">
+                        <div>
+                            <h2>
+                                {editingPerson
+                                    ? "Edit Personnel"
+                                    : "Add Personnel"}
+                            </h2>
+                            <p>
+                                {editingPerson
+                                    ? "Update personnel information."
+                                    : "Enter the personnel information below."}
+                            </p>
+                        </div>
 
-          )}
+                        <button
+                            type="button"
+                            className="close-button"
+                            onClick={() => setShowForm(false)}
+                            aria-label="Close form"
+                        >
+                            ×
+                        </button>
+                    </div>
 
+                    <form onSubmit={handleSubmit}>
+                        <div className="form-grid">
+                            <div className="input-group">
+                                <label htmlFor="serviceNumber">
+                                    Service Number
+                                </label>
+                                <input
+                                    id="serviceNumber"
+                                    type="text"
+                                    name="serviceNumber"
+                                    value={formData.serviceNumber}
+                                    onChange={handleChange}
+                                    disabled={editingPerson !== null}
+                                    placeholder="e.g. MP004"
+                                    required
+                                />
+                            </div>
+
+                            <div className="input-group">
+                                <label htmlFor="fullName">Full Name</label>
+                                <input
+                                    id="fullName"
+                                    type="text"
+                                    name="fullName"
+                                    value={formData.fullName}
+                                    onChange={handleChange}
+                                    placeholder="Enter full name"
+                                    required
+                                />
+                            </div>
+
+                            <div className="input-group">
+                                <label htmlFor="rank">Rank</label>
+                                <select
+                                    id="rank"
+                                    name="rank"
+                                    value={formData.rank}
+                                    onChange={handleChange}
+                                    required
+                                >
+                                    <option value="">Select Rank</option>
+                                    <option value="Lieutenant">Lieutenant</option>
+                                    <option value="Captain">Captain</option>
+                                    <option value="Major">Major</option>
+                                    <option value="Colonel">Colonel</option>
+                                </select>
+                            </div>
+
+                            <div className="input-group">
+                                <label htmlFor="unitId">Unit</label>
+                                <select
+                                    id="unitId"
+                                    name="unitId"
+                                    value={formData.unitId}
+                                    onChange={handleChange}
+                                    required
+                                    disabled={units.length === 0}
+                                >
+                                    <option value="">Select Unit</option>
+                                    {units.map((unit) => (
+                                        <option
+                                            key={unit.id}
+                                            value={unit.id}
+                                        >
+                                            {unit.unitName}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {unitsError && (
+                                    <p className="login-error">
+                                        {unitsError}. You cannot save this form
+                                        until unit data is available.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="input-group">
+                                <label htmlFor="phone">Contact Number</label>
+                                <input
+                                    id="phone"
+                                    type="tel"
+                                    name="phone"
+                                    value={formData.phone}
+                                    onChange={handleChange}
+                                    placeholder="Enter contact number"
+                                    required
+                                />
+                            </div>
+
+                            <div className="input-group">
+                                <label htmlFor="email">Email</label>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                    placeholder="Enter email address"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-actions">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => setShowForm(false)}
+                            >
+                                Cancel
+                            </button>
+
+                            <button
+                                type="submit"
+                                className="primary-button"
+                                disabled={saving || units.length === 0}
+                            >
+                                {saving
+                                    ? "Saving..."
+                                    : editingPerson
+                                      ? "Save Changes"
+                                      : "Add Personnel"}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            <div className="table-card">
+                <div className="table-toolbar">
+                    <div>
+                        <h2>Personnel Records</h2>
+                        <span>
+                            {personnel.length} registered personnel
+                        </span>
+                    </div>
+
+                    <input
+                        className="search-input"
+                        type="text"
+                        placeholder="Search by name or service number..."
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                    />
+                </div>
+
+                <div className="table-container">
+                    {loading ? (
+                        <p>Loading personnel...</p>
+                    ) : (
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Service No.</th>
+                                    <th>Name</th>
+                                    <th>Rank</th>
+                                    <th>Unit</th>
+                                    <th>Phone</th>
+                                    <th>Email</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                {filteredPersonnel.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="7">
+                                            {error
+                                                ? "Unable to load personnel records."
+                                                : "No personnel records found."}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    filteredPersonnel.map((person) => (
+                                        <tr key={person.id}>
+                                            <td>
+                                                <strong>
+                                                    {person.serviceNumber}
+                                                </strong>
+                                            </td>
+                                            <td>{person.fullName}</td>
+                                            <td>{person.rank || "—"}</td>
+                                            <td>{getUnitName(person.unit)}</td>
+                                            <td>{person.phone || "—"}</td>
+                                            <td>{person.email || "—"}</td>
+                                            <td>
+                                                <div className="action-buttons">
+                                                    <button
+                                                        type="button"
+                                                        className="view-button"
+                                                        onClick={() =>
+                                                            setViewingPerson(person)
+                                                        }
+                                                    >
+                                                        View
+                                                    </button>
+
+                                                    {canManagePersonnel && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="edit-button"
+                                                                onClick={() =>
+                                                                    openEditForm(person)
+                                                                }
+                                                            >
+                                                                Edit
+                                                            </button>
+
+                                                            <button
+                                                                type="button"
+                                                                className="delete-button"
+                                                                onClick={() =>
+                                                                    handleDelete(person)
+                                                                }
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+
+            {viewingPerson && (
+                <div className="modal-overlay">
+                    <div className="details-modal">
+                        <div className="modal-header">
+                            <div>
+                                <h2>Personnel Details</h2>
+                                <p>
+                                    Service Number:{" "}
+                                    {viewingPerson.serviceNumber}
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="close-button"
+                                onClick={() => setViewingPerson(null)}
+                                aria-label="Close personnel details"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="details-grid">
+                            <div>
+                                <span>Full Name</span>
+                                <strong>{viewingPerson.fullName}</strong>
+                            </div>
+                            <div>
+                                <span>Rank</span>
+                                <strong>{viewingPerson.rank || "—"}</strong>
+                            </div>
+                            <div>
+                                <span>Unit</span>
+                                <strong>
+                                    {getUnitName(viewingPerson.unit)}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Phone</span>
+                                <strong>{viewingPerson.phone || "—"}</strong>
+                            </div>
+                            <div>
+                                <span>Email</span>
+                                <strong>{viewingPerson.email || "—"}</strong>
+                            </div>
+                        </div>
+
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => setViewingPerson(null)}
+                            >
+                                Close
+                            </button>
+
+                            {canManagePersonnel && (
+                                <button
+                                    type="button"
+                                    className="primary-button"
+                                    onClick={() => {
+                                        openEditForm(viewingPerson);
+                                        setViewingPerson(null);
+                                    }}
+                                >
+                                    Edit Personnel
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-
-      </div>
-
-      {/* VIEW PERSONNEL MODAL */}
-
-      {viewingPerson && (
-
-        <div className="modal-overlay">
-
-          <div className="details-modal">
-
-            <div className="modal-header">
-
-              <div>
-                <h2>Personnel Details</h2>
-
-                <p>
-                  Service Number:{" "}
-                  {viewingPerson.serviceNumber}
-                </p>
-              </div>
-
-              <button
-                className="close-button"
-                onClick={() =>
-                  setViewingPerson(null)
-                }
-              >
-                ×
-              </button>
-
-            </div>
-
-            <div className="details-grid">
-
-              <div>
-                <span>Full Name</span>
-                <strong>
-                  {viewingPerson.fullName}
-                </strong>
-              </div>
-
-              <div>
-                <span>Rank</span>
-                <strong>
-                  {viewingPerson.rank || "—"}
-                </strong>
-              </div>
-
-              <div>
-                <span>Unit</span>
-                <strong>
-                  {getUnitName(viewingPerson.unit)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Phone</span>
-                <strong>
-                  {viewingPerson.phone || "—"}
-                </strong>
-              </div>
-
-              <div>
-                <span>Email</span>
-                <strong>
-                  {viewingPerson.email || "—"}
-                </strong>
-              </div>
-
-            </div>
-
-            <div className="modal-actions">
-
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  setViewingPerson(null)
-                }
-              >
-                Close
-              </button>
-
-              <button
-                className="primary-button"
-                onClick={() => {
-                  openEditForm(viewingPerson);
-                  setViewingPerson(null);
-                }}
-              >
-                Edit Personnel
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
-
-    </div>
-  );
+    );
 }
 
 export default Personnel;

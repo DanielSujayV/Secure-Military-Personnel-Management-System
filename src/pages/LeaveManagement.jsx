@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 function LeaveManagement() {
+  const { role } = useAuth();
+  const canReviewLeave = role === "COMMANDER";
+  const canApplyLeave = role === "OFFICER" || role === "PERSONNEL";
   const API_BASE_URL = "http://localhost:8080/api";
 
   const [leaves, setLeaves] = useState([]);
@@ -102,25 +106,35 @@ function LeaveManagement() {
   const parseReason = (reason) => {
     if (!reason) {
       return {
-        type: "—",
+        type: "Not specified",
         reason: "",
       };
     }
 
     const separator = " | ";
+    const separatorIndex = reason.indexOf(separator);
 
-    if (reason.includes(separator)) {
-      const parts = reason.split(separator);
-
+    if (separatorIndex !== -1) {
       return {
-        type: parts[0],
-        reason: parts.slice(1).join(separator),
+        type: reason.slice(0, separatorIndex).trim(),
+        reason: reason.slice(separatorIndex + separator.length).trim(),
       };
     }
 
+    // Older requests may not have a separate leave type.
+    const knownTypes = [
+      "Casual Leave",
+      "Annual Leave",
+      "Medical Leave",
+    ];
+
+    const matchedType = knownTypes.find(
+      (type) => reason.trim().toLowerCase() === type.toLowerCase()
+    );
+
     return {
-      type: "—",
-      reason,
+      type: matchedType || "Not specified",
+      reason: matchedType ? "" : reason,
     };
   };
 
@@ -134,7 +148,7 @@ function LeaveManagement() {
       personnelName:
         leave.personnel?.fullName || "Unknown",
       serviceNo:
-        leave.personnel?.serviceNumber || "—",
+        leave.personnel?.serviceNumber || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â",
     };
   };
 
@@ -377,12 +391,12 @@ function LeaveManagement() {
           </p>
         </div>
 
-        <button
+        {canApplyLeave && (<button
           className="primary-button"
           onClick={openAddForm}
         >
           + Apply for Leave
-        </button>
+        </button>)}
 
       </div>
 
@@ -413,7 +427,7 @@ function LeaveManagement() {
               className="close-button"
               onClick={() => setShowForm(false)}
             >
-              ×
+              ÃƒÆ’Ã¢â‚¬â€
             </button>
 
           </div>
@@ -695,7 +709,7 @@ function LeaveManagement() {
                   setViewingLeave(null)
                 }
               >
-                ×
+                ÃƒÆ’Ã¢â‚¬â€
               </button>
 
             </div>
@@ -760,7 +774,7 @@ function LeaveManagement() {
 
             </div>
 
-            {viewingLeave.status ===
+            {canReviewLeave && viewingLeave.status ===
               "PENDING" && (
 
               <div className="modal-actions">
@@ -795,14 +809,14 @@ function LeaveManagement() {
 
             <div className="modal-actions">
 
-              <button
+              {canReviewLeave && viewingLeave.status === "PENDING" && (<button
                 className="secondary-button"
                 onClick={() =>
                   handleDelete(viewingLeave)
                 }
               >
                 Delete
-              </button>
+              </button>)}
 
               <button
                 className="secondary-button"
@@ -826,3 +840,4 @@ function LeaveManagement() {
 }
 
 export default LeaveManagement;
+

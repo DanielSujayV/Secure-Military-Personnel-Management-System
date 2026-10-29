@@ -4,7 +4,9 @@ import com.military.military_personnel_management.entity.TpmChallenge;
 import com.military.military_personnel_management.entity.TrustedDevice;
 import com.military.military_personnel_management.repository.TpmChallengeRepository;
 import com.military.military_personnel_management.repository.TrustedDeviceRepository;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -24,57 +26,75 @@ public class TpmService {
     private static final String TPM_HELPER_URL =
             "http://127.0.0.1:8765";
 
+    private final RestTemplate restTemplate;
     private final TrustedDeviceRepository trustedDeviceRepository;
     private final TpmChallengeRepository tpmChallengeRepository;
-    private final RestTemplate restTemplate;
-    private final SecureRandom secureRandom = new SecureRandom();
 
     public TpmService(
+            RestTemplate restTemplate,
             TrustedDeviceRepository trustedDeviceRepository,
-            TpmChallengeRepository tpmChallengeRepository,
-            RestTemplate restTemplate) {
+            TpmChallengeRepository tpmChallengeRepository) {
 
+        this.restTemplate = restTemplate;
         this.trustedDeviceRepository = trustedDeviceRepository;
         this.tpmChallengeRepository = tpmChallengeRepository;
-        this.restTemplate = restTemplate;
     }
 
     public TrustedDevice registerDevice(String username) {
 
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                TPM_HELPER_URL + "/tpm/register",
-                null,
-                Map.class
-        );
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-        if (!response.getStatusCode().is2xxSuccessful()
-                || response.getBody() == null) {
+        HttpEntity<Void> request =
+                new HttpEntity<>(headers);
 
+        Map<String, Object> response =
+                restTemplate.postForObject(
+                        TPM_HELPER_URL + "/tpm/register",
+                        request,
+                        Map.class
+                );
+
+        if (response == null) {
             throw new RuntimeException(
-                    "TPM registration failed"
+                    "TPM helper returned an empty response"
             );
         }
 
-        Map<String, Object> data = response.getBody();
+        Object deviceIdValue =
+                response.get("deviceId");
 
-        String deviceId = (String) data.get("deviceId");
-        String publicKey = (String) data.get("publicKey");
+        Object publicKeyValue =
+                response.get("publicKey");
 
-        if (deviceId == null || publicKey == null) {
+        if (deviceIdValue == null ||
+                publicKeyValue == null) {
+
             throw new RuntimeException(
-                    "TPM helper returned incomplete registration data"
+                    "TPM helper response did not contain deviceId and publicKey"
             );
         }
+
+        String deviceId =
+                deviceIdValue.toString();
+
+        String publicKey =
+                publicKeyValue.toString();
 
         TrustedDevice device =
                 trustedDeviceRepository
-                        .findByDeviceId(deviceId)
+                        .findByDeviceIdAndUsername(
+                                deviceId,
+                                username
+                        )
                         .orElse(new TrustedDevice());
 
         device.setDeviceId(deviceId);
         device.setUsername(username);
         device.setPublicKey(publicKey);
-        device.setRegisteredAt(LocalDateTime.now());
+        device.setRegisteredAt(
+                LocalDateTime.now()
+        );
         device.setEnabled(true);
 
         return trustedDeviceRepository.save(device);
@@ -86,38 +106,44 @@ public class TpmService {
 
         TrustedDevice device =
                 trustedDeviceRepository
-                        .findByDeviceId(deviceId)
+                        .findByDeviceIdAndUsername(
+                                deviceId,
+                                username
+                        )
                         .orElseThrow(() ->
                                 new RuntimeException(
                                         "Trusted TPM device not found"
-                                ));
-
-        if (!device.getUsername().equals(username)) {
-            throw new RuntimeException(
-                    "TPM device does not belong to this user"
-            );
-        }
+                                )
+                        );
 
         if (!device.isEnabled()) {
             throw new RuntimeException(
-                    "TPM device is disabled"
+                    "Trusted TPM device is disabled"
             );
         }
 
-        byte[] randomBytes = new byte[32];
-        secureRandom.nextBytes(randomBytes);
+        byte[] randomBytes =
+                new byte[32];
+
+        new SecureRandom()
+                .nextBytes(randomBytes);
 
         String challenge =
-                Base64.getEncoder().encodeToString(randomBytes);
+                Base64.getEncoder()
+                        .encodeToString(randomBytes);
 
-        TpmChallenge tpmChallenge = new TpmChallenge();
+        TpmChallenge tpmChallenge =
+                new TpmChallenge();
 
         tpmChallenge.setChallengeId(
                 UUID.randomUUID().toString()
         );
 
         tpmChallenge.setDeviceId(deviceId);
-        tpmChallenge.setChallenge(challenge);
+
+        tpmChallenge.setChallenge(
+                challenge
+        );
 
         tpmChallenge.setCreatedAt(
                 LocalDateTime.now()
@@ -129,7 +155,9 @@ public class TpmService {
 
         tpmChallenge.setUsed(false);
 
-        return tpmChallengeRepository.save(tpmChallenge);
+        return tpmChallengeRepository.save(
+                tpmChallenge
+        );
     }
 
     public boolean verifySignature(
@@ -140,17 +168,14 @@ public class TpmService {
 
         TpmChallenge challenge =
                 tpmChallengeRepository
-                        .findByChallengeId(challengeId)
+                        .findByChallengeId(
+                                challengeId
+                        )
                         .orElseThrow(() ->
                                 new RuntimeException(
                                         "TPM challenge not found"
-                                ));
-
-        if (!challenge.getDeviceId().equals(deviceId)) {
-            throw new RuntimeException(
-                    "Challenge does not belong to this device"
-            );
-        }
+                                )
+                        );
 
         if (challenge.isUsed()) {
             throw new RuntimeException(
@@ -166,40 +191,38 @@ public class TpmService {
             );
         }
 
-        TrustedDevice device =
-                trustedDeviceRepository
-                        .findByDeviceId(deviceId)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Trusted TPM device not found"
-                                ));
+        if (!challenge.getDeviceId()
+                .equals(deviceId)) {
 
-        if (!device.getUsername().equals(username)) {
             throw new RuntimeException(
-                    "TPM device does not belong to this user"
+                    "TPM device mismatch"
             );
         }
 
+        TrustedDevice device =
+                trustedDeviceRepository
+                        .findByDeviceIdAndUsername(
+                                deviceId,
+                                username
+                        )
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Trusted TPM device not found"
+                                )
+                        );
+
         if (!device.isEnabled()) {
             throw new RuntimeException(
-                    "TPM device is disabled"
+                    "Trusted TPM device is disabled"
             );
         }
 
         try {
+
             byte[] publicKeyBytes =
                     Base64.getDecoder().decode(
                             device.getPublicKey()
                     );
-
-            X509EncodedKeySpec keySpec =
-                    new X509EncodedKeySpec(publicKeyBytes);
-
-            KeyFactory keyFactory =
-                    KeyFactory.getInstance("RSA");
-
-            PublicKey publicKey =
-                    keyFactory.generatePublic(keySpec);
 
             byte[] signatureBytes =
                     Base64.getDecoder().decode(
@@ -211,26 +234,52 @@ public class TpmService {
                             challenge.getChallenge()
                     );
 
-            Signature verifier =
-                    Signature.getInstance("SHA256withRSA");
+            X509EncodedKeySpec keySpec =
+                    new X509EncodedKeySpec(
+                            publicKeyBytes
+                    );
 
-            verifier.initVerify(publicKey);
-            verifier.update(challengeBytes);
+            KeyFactory keyFactory =
+                    KeyFactory.getInstance("RSA");
+
+            PublicKey publicKey =
+                    keyFactory.generatePublic(
+                            keySpec
+                    );
+
+            Signature signature =
+                    Signature.getInstance(
+                            "SHA256withRSA"
+                    );
+
+            signature.initVerify(
+                    publicKey
+            );
+
+            signature.update(
+                    challengeBytes
+            );
 
             boolean valid =
-                    verifier.verify(signatureBytes);
+                    signature.verify(
+                            signatureBytes
+                    );
 
             if (valid) {
                 challenge.setUsed(true);
-                tpmChallengeRepository.save(challenge);
+
+                tpmChallengeRepository.save(
+                        challenge
+                );
             }
 
             return valid;
 
-        } catch (Exception ex) {
+        } catch (Exception e) {
+
             throw new RuntimeException(
-                    "TPM signature verification failed",
-                    ex
+                    "Failed to verify TPM signature",
+                    e
             );
         }
     }

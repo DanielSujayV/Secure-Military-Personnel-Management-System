@@ -1,3 +1,4 @@
+
 package com.military.military_personnel_management.controller;
 
 import com.military.military_personnel_management.dto.LoginResponse;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -68,7 +70,6 @@ public class AuthController {
             @RequestParam String password) {
 
         try {
-
             Authentication authentication =
                     authenticationManager.authenticate(
                             new UsernamePasswordAuthenticationToken(
@@ -84,28 +85,18 @@ public class AuthController {
                     .orElseThrow(() ->
                             new RuntimeException("User not found"));
 
-            /*
-             * Password authentication succeeded.
-             * The next authentication factor is TPM.
-             */
             TrustedDevice trustedDevice =
-                   trustedDeviceRepository
-        .findFirstByUsernameAndEnabledTrueOrderByRegisteredAtDesc(username)
+                    trustedDeviceRepository
+                            .findFirstByUsernameAndEnabledTrueOrderByRegisteredAtDesc(username)
                             .orElseThrow(() ->
                                     new ResponseStatusException(
                                             HttpStatus.UNAUTHORIZED,
                                             "No trusted TPM device registered for this user"
                                     ));
 
-            /*
-             * Generate a short-lived pre-authentication JWT.
-             */
             String preAuthToken =
                     jwtService.generatePreAuthToken(userDetails);
 
-            /*
-             * Generate a fresh TPM challenge.
-             */
             TpmChallenge challenge =
                     tpmService.createChallenge(
                             username,
@@ -169,13 +160,8 @@ public class AuthController {
         String token = authorization.substring(7);
 
         try {
+            String username = jwtService.extractUsername(token);
 
-            String username =
-                    jwtService.extractUsername(token);
-
-            /*
-             * This must still be a password-only pre-auth token.
-             */
             if (jwtService.isTpmVerified(token)
                     || jwtService.isTotpVerified(token)) {
 
@@ -188,26 +174,21 @@ public class AuthController {
             UserDetails userDetails =
                     userDetailsService.loadUserByUsername(username);
 
-            if (!jwtService.isTokenValid(
-                    token,
-                    userDetails)) {
-
+            if (!jwtService.isTokenValid(token, userDetails)) {
                 throw new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "Invalid authentication token"
                 );
             }
 
-            boolean valid =
-                    tpmService.verifySignature(
-                            username,
-                            request.challengeId(),
-                            request.deviceId(),
-                            request.signature()
-                    );
+            boolean valid = tpmService.verifySignature(
+                    username,
+                    request.challengeId(),
+                    request.deviceId(),
+                    request.signature()
+            );
 
             if (!valid) {
-
                 auditLogService.createAuditLog(
                         new AuditLog(
                                 username,
@@ -233,9 +214,7 @@ public class AuthController {
             );
 
             String tpmVerifiedToken =
-                    jwtService.generateTpmVerifiedToken(
-                            userDetails
-                    );
+                    jwtService.generateTpmVerifiedToken(userDetails);
 
             return new LoginResponse(
                     tpmVerifiedToken,
@@ -244,11 +223,8 @@ public class AuthController {
             );
 
         } catch (ResponseStatusException ex) {
-
             throw ex;
-
         } catch (Exception ex) {
-
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "Invalid TPM authentication token"
@@ -276,13 +252,8 @@ public class AuthController {
         String token = authorization.substring(7);
 
         try {
+            String username = jwtService.extractUsername(token);
 
-            String username =
-                    jwtService.extractUsername(token);
-
-            /*
-             * TOTP must only be performed after TPM verification.
-             */
             if (!jwtService.isTpmVerified(token)
                     || jwtService.isTotpVerified(token)) {
 
@@ -295,23 +266,19 @@ public class AuthController {
             UserDetails userDetails =
                     userDetailsService.loadUserByUsername(username);
 
-            if (!jwtService.isTokenValid(
-                    token,
-                    userDetails)) {
-
+            if (!jwtService.isTokenValid(token, userDetails)) {
                 throw new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "Invalid authentication token"
                 );
             }
 
-            User user =
-                    userRepository.findByUsername(username)
-                            .orElseThrow(() ->
-                                    new ResponseStatusException(
-                                            HttpStatus.UNAUTHORIZED,
-                                            "User not found"
-                                    ));
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() ->
+                            new ResponseStatusException(
+                                    HttpStatus.UNAUTHORIZED,
+                                    "User not found"
+                            ));
 
             TotpCredential credential =
                     totpCredentialRepository
@@ -323,21 +290,18 @@ public class AuthController {
                                     ));
 
             if (!credential.isEnabled()) {
-
                 throw new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "TOTP is not enabled"
                 );
             }
 
-            boolean valid =
-                    totpService.verifyCode(
-                            credential.getSecret(),
-                            request.getCode()
-                    );
+            boolean valid = totpService.verifyCode(
+                    credential.getSecret(),
+                    request.getCode()
+            );
 
             if (!valid) {
-
                 auditLogService.createAuditLog(
                         new AuditLog(
                                 username,
@@ -362,8 +326,7 @@ public class AuthController {
                     )
             );
 
-            String finalToken =
-                    jwtService.generateToken(userDetails);
+            String finalToken = jwtService.generateToken(userDetails);
 
             return new LoginResponse(
                     finalToken,
@@ -372,11 +335,64 @@ public class AuthController {
             );
 
         } catch (ResponseStatusException ex) {
-
             throw ex;
-
         } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid authentication token"
+            );
+        }
+    }
 
+    @GetMapping("/me")
+    public Map<String, String> getCurrentUser(
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorization) {
+
+        if (authorization == null
+                || !authorization.startsWith("Bearer ")) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Bearer token required"
+            );
+        }
+
+        String token = authorization.substring(7);
+
+        try {
+            String username = jwtService.extractUsername(token);
+
+            UserDetails userDetails =
+                    userDetailsService.loadUserByUsername(username);
+
+            if (!jwtService.isTokenValid(token, userDetails)
+                    || !jwtService.isTpmVerified(token)
+                    || !jwtService.isTotpVerified(token)) {
+
+                throw new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Fully verified authentication required"
+                );
+            }
+
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() ->
+                            new ResponseStatusException(
+                                    HttpStatus.UNAUTHORIZED,
+                                    "User not found"
+                            ));
+
+            return Map.of(
+                    "username", user.getUsername(),
+                    "role", user.getRole().getRoleName()
+            );
+
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "Invalid authentication token"
