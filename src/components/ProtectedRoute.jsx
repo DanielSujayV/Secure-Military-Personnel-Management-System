@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const ROLE_ROUTES = {
@@ -10,16 +10,27 @@ const ROLE_ROUTES = {
 
 const ProtectedRoute = () => {
     const { isAuthenticated, role, roleLoading } = useAuth();
+    const location = useLocation();
 
-    if (!isAuthenticated) return <Navigate to="/login" replace />;
-    if (roleLoading) return <div role="status" aria-live="polite">Loading your secure session…</div>;
-    if (!role) return <Navigate to="/login" replace />;
+    if (!isAuthenticated) {
+        return <Navigate to="/login" replace state={{ from: location }} />;
+    }
+
+    // Wait for /api/auth/me so a valid token is not redirected mid-load.
+    if (roleLoading) {
+        return <div role="status" aria-live="polite">Loading your secure session…</div>;
+    }
+
+    if (!role) {
+        return <Navigate to="/login" replace />;
+    }
 
     const allowedPaths = ROLE_ROUTES[role] || [];
-    // Root protected routes render the nested page; check the current URL
-    // at the page level would require useLocation, so this guard validates
-    // access using the router's location.
-    return <Outlet context={{ allowedPaths }} />;
+    if (!allowedPaths.includes(location.pathname)) {
+        return <Navigate to="/dashboard" replace />;
+    }
+
+    return <Outlet />;
 };
 
 export default ProtectedRoute;
