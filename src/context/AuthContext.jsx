@@ -6,6 +6,7 @@ import {
     useEffect,
     useCallback,
     useMemo,
+    useRef,
 } from "react";
 
 const AuthContext = createContext(null);
@@ -15,8 +16,10 @@ export const AuthProvider = ({ children }) => {
     const [username, setUsername] = useState(() => localStorage.getItem("username"));
     const [role, setRole] = useState(null);
     const [roleLoading, setRoleLoading] = useState(() => Boolean(localStorage.getItem("token")));
+    const requestSequence = useRef(0);
 
     const loadRole = useCallback(async (authToken) => {
+        const requestId = ++requestSequence.current;
         if (!authToken) {
             setUsername(null);
             setRole(null);
@@ -35,6 +38,7 @@ export const AuthProvider = ({ children }) => {
             }
 
             const data = await response.json();
+            if (requestId !== requestSequence.current) return null;
             if (!data?.username || !data?.role) {
                 throw new Error("The server returned an incomplete user profile.");
             }
@@ -46,14 +50,17 @@ export const AuthProvider = ({ children }) => {
             setRole(normalizedRole);
             return data;
         } catch (error) {
-            // Keep pre-authentication tokens in place for the TPM/TOTP flow,
-            // but never treat them as authenticated application sessions.
-            localStorage.removeItem("role");
-            setRole(null);
-            console.warn("User profile is not available yet:", error.message);
+            // Ignore stale responses from earlier authentication stages.
+            if (requestId === requestSequence.current) {
+                localStorage.removeItem("role");
+                setRole(null);
+                console.warn("User profile is not available yet:", error.message);
+            }
             return null;
         } finally {
-            setRoleLoading(false);
+            if (requestId === requestSequence.current) {
+                setRoleLoading(false);
+            }
         }
     }, []);
 
@@ -62,6 +69,7 @@ export const AuthProvider = ({ children }) => {
     }, [token, loadRole]);
 
     const login = useCallback((authToken, user) => {
+        requestSequence.current += 1;
         localStorage.setItem("token", authToken);
         if (user) localStorage.setItem("username", user);
         localStorage.removeItem("role");
@@ -74,6 +82,7 @@ export const AuthProvider = ({ children }) => {
     // React state and localStorage cannot drift out of sync.
     const replaceToken = useCallback((authToken, user) => {
         if (!authToken) throw new Error("A valid authentication token is required.");
+        requestSequence.current += 1;
         localStorage.setItem("token", authToken);
         if (user) localStorage.setItem("username", user);
         setToken(authToken);
@@ -84,6 +93,7 @@ export const AuthProvider = ({ children }) => {
     const refreshUser = useCallback((authToken = token) => loadRole(authToken), [loadRole, token]);
 
     const logout = useCallback(() => {
+        requestSequence.current += 1;
         localStorage.removeItem("token");
         localStorage.removeItem("username");
         localStorage.removeItem("role");
