@@ -39,11 +39,12 @@ public class UserService {
     }
 
     public User createUser(User user) {
-        if (user.getUsername() == null || user.getUsername().isBlank()) {
-            throw new IllegalArgumentException("Username is required");
+        if (user == null) {
+            throw new IllegalArgumentException("User details are required");
         }
-        if (user.getPassword() == null || user.getPassword().isBlank()) {
-            throw new IllegalArgumentException("Password is required");
+        validateUsername(user.getUsername(), null);
+        if (user.getPassword() == null || user.getPassword().length() < 12) {
+            throw new IllegalArgumentException("Password must contain at least 12 characters");
         }
         if (user.getRole() == null || user.getRole().getId() == null) {
             throw new IllegalArgumentException("Role is required");
@@ -51,6 +52,7 @@ public class UserService {
 
         Role role = roleRepository.findById(user.getRole().getId())
                 .orElseThrow(() -> new RuntimeException("Role not found"));
+        user.setUsername(user.getUsername().trim());
         user.setRole(role);
         Personnel linkedPersonnel = resolvePersonnel(user.getPersonnel());
         validatePersonnelAssociation(role, linkedPersonnel);
@@ -76,6 +78,10 @@ public class UserService {
     }
 
     public User updateUser(User user) {
+        if (user == null || user.getId() == null) {
+            throw new IllegalArgumentException("User ID is required");
+        }
+        validateUsername(user.getUsername(), user.getId());
         User existing = userRepository.findById(user.getId())
                 .orElseThrow(() -> new RuntimeException(
                         "User not found with id: " + user.getId()));
@@ -93,7 +99,7 @@ public class UserService {
         }
         validatePersonnelAssociation(role, linkedPersonnel);
 
-        existing.setUsername(user.getUsername());
+        existing.setUsername(user.getUsername().trim());
         existing.setRole(role);
         existing.setEnabled(user.isEnabled());
         existing.setPersonnel(linkedPersonnel);
@@ -113,6 +119,22 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         userRepository.deleteById(id);
         audit("USER_DELETED", "Deleted user: " + user.getUsername());
+    }
+
+    private void validateUsername(String username, Long currentId) {
+        if (username == null || !username.trim().matches("^[A-Za-z0-9._-]{3,64}$")) {
+            throw new IllegalArgumentException(
+                    "Username must be 3-64 characters using letters, numbers, dot, underscore or hyphen");
+        }
+        String normalized = username.trim();
+        boolean duplicate = currentId == null
+                ? userRepository.existsByUsernameIgnoreCase(normalized)
+                : userRepository.existsByUsernameIgnoreCaseAndIdNot(normalized, currentId);
+        if (duplicate) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "Username is already in use");
+        }
     }
 
     private void validatePersonnelAssociation(Role role, Personnel personnel) {
