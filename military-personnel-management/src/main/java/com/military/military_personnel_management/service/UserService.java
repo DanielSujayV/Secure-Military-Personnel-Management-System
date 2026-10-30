@@ -51,7 +51,8 @@ public class UserService {
         }
 
         Role role = roleRepository.findById(user.getRole().getId())
-                .orElseThrow(() -> new RuntimeException("Role not found"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Role not found"));
         user.setUsername(user.getUsername().trim());
         user.setRole(role);
         Personnel linkedPersonnel = resolvePersonnel(user.getPersonnel());
@@ -83,8 +84,8 @@ public class UserService {
         }
         validateUsername(user.getUsername(), user.getId());
         User existing = userRepository.findById(user.getId())
-                .orElseThrow(() -> new RuntimeException(
-                        "User not found with id: " + user.getId()));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "User not found"));
 
         if (user.getRole() == null || user.getRole().getId() == null) {
             throw new IllegalArgumentException("Role is required");
@@ -116,7 +117,8 @@ public class UserService {
 
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "User not found"));
         userRepository.deleteById(id);
         audit("USER_DELETED", "Deleted user: " + user.getUsername());
     }
