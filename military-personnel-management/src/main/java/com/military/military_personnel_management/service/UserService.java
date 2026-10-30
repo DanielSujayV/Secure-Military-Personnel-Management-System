@@ -88,7 +88,9 @@ public class UserService {
         existing.setUsername(user.getUsername());
         existing.setRole(role);
         existing.setEnabled(user.isEnabled());
-        existing.setPersonnel(resolvePersonnel(user.getPersonnel()));
+        if (user.getPersonnel() != null && user.getPersonnel().getId() != null) {
+            existing.setPersonnel(resolvePersonnel(user.getPersonnel()));
+        }
 
         if (user.getPassword() != null && !user.getPassword().isBlank()) {
             existing.setPassword(passwordEncoder.encode(user.getPassword()));
