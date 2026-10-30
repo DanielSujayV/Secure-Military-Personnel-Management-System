@@ -129,7 +129,7 @@ Existing accounts are not automatically linked to personnel records. Until an ac
 
 - Keep database credentials, JWT signing keys, and any local environment files out of source control.
 - Use HTTPS, secure secret storage, database encryption, rate limiting, and managed key rotation before any production use.
-- TOTP secrets are stored using AES-GCM encryption when `TOTP_ENCRYPTION_KEY` is configured. Existing legacy plaintext secrets remain readable for backward compatibility until re-enrolled; rotate them after setting the key. Keep the key backed up securely because losing it prevents TOTP verification.
+- TOTP secrets are stored using AES-GCM encryption when `TOTP_ENCRYPTION_KEY` is configured. Existing legacy plaintext secrets remain readable for backward compatibility until reset. After configuring the key, an administrator can reset a user credential through the admin-only `/api/totp/setup-for-user` endpoint and confirm the new code through `/api/totp/confirm-for-user`; this replaces the legacy secret with encrypted storage. Keep the key backed up securely because losing it prevents TOTP verification.
 - The TPM helper currently performs local TPM-backed signing; it is not a full remote-attestation protocol.
 - Use database migrations rather than relying on automatic schema updates for production.
 - Run backend tests, frontend production build, and role-by-role API tests before merging changes into `main`.
