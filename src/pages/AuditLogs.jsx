@@ -55,7 +55,8 @@ function AuditLogs() {
 
     if (
       normalizedAction.includes("FAILED") ||
-      normalizedAction.includes("FAIL")
+      normalizedAction.includes("FAIL") ||
+      normalizedAction.includes("DENIED")
     ) {
       return "Failed";
     }
@@ -214,7 +215,7 @@ function AuditLogs() {
                 {filteredLogs.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="6"
+                      colSpan="5"
                       style={{
                         textAlign: "center",
                         padding: "20px",
@@ -241,10 +242,6 @@ function AuditLogs() {
                           <strong>
                             {log.username || "—"}
                           </strong>
-                        </td>
-
-                        <td>
-                          —
                         </td>
 
                         <td>
