@@ -52,7 +52,9 @@ public class UserService {
         Role role = roleRepository.findById(user.getRole().getId())
                 .orElseThrow(() -> new RuntimeException("Role not found"));
         user.setRole(role);
-        user.setPersonnel(resolvePersonnel(user.getPersonnel()));
+        Personnel linkedPersonnel = resolvePersonnel(user.getPersonnel());
+        validatePersonnelAssociation(role, linkedPersonnel);
+        user.setPersonnel(linkedPersonnel);
 
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User saved = userRepository.save(user);
@@ -85,12 +87,16 @@ public class UserService {
         Role role = roleRepository.findById(user.getRole().getId())
                 .orElseThrow(() -> new RuntimeException("Role not found"));
 
+        Personnel linkedPersonnel = existing.getPersonnel();
+        if (user.getPersonnel() != null && user.getPersonnel().getId() != null) {
+            linkedPersonnel = resolvePersonnel(user.getPersonnel());
+        }
+        validatePersonnelAssociation(role, linkedPersonnel);
+
         existing.setUsername(user.getUsername());
         existing.setRole(role);
         existing.setEnabled(user.isEnabled());
-        if (user.getPersonnel() != null && user.getPersonnel().getId() != null) {
-            existing.setPersonnel(resolvePersonnel(user.getPersonnel()));
-        }
+        existing.setPersonnel(linkedPersonnel);
 
         if (user.getPassword() != null && !user.getPassword().isBlank()) {
             existing.setPassword(passwordEncoder.encode(user.getPassword()));
@@ -107,6 +113,16 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         userRepository.deleteById(id);
         audit("USER_DELETED", "Deleted user: " + user.getUsername());
+    }
+
+    private void validatePersonnelAssociation(Role role, Personnel personnel) {
+        String roleName = role.getRoleName() == null
+                ? "" : role.getRoleName().toUpperCase();
+        if (("PERSONNEL".equals(roleName) || "OFFICER".equals(roleName))
+                && personnel == null) {
+            throw new IllegalArgumentException(
+                    roleName + " accounts must be linked to a personnel record");
+        }
     }
 
     private Personnel resolvePersonnel(Personnel supplied) {
