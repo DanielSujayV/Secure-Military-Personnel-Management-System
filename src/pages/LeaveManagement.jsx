@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../services/api";
 
 function LeaveManagement() {
   const { role } = useAuth();
   const canReviewLeave = role === "ADMIN" || role === "COMMANDER";
   const canApplyLeave = ["ADMIN", "COMMANDER", "OFFICER", "PERSONNEL"].includes(role);
-  const API_BASE_URL = "http://localhost:8080/api";
 
   const [leaves, setLeaves] = useState([]);
   const [personnelList, setPersonnelList] = useState([]);
