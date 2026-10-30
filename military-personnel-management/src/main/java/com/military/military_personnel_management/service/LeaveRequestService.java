@@ -71,7 +71,7 @@ public class LeaveRequestService {
                         "Leave request not found with id: " + request.getId()));
 
         if (!"PENDING".equals(existing.getStatus())) {
-            throw new IllegalStateException("Only pending leave requests can be edited");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can be edited");
         }
         validateDates(request);
         existing.setPersonnel(request.getPersonnel());
@@ -105,7 +105,7 @@ public class LeaveRequestService {
                 .orElseThrow(() -> new RuntimeException(
                         "Leave request not found with id: " + id));
         if (!"PENDING".equals(request.getStatus())) {
-            throw new IllegalStateException("Only pending leave requests can be deleted");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can be deleted");
         }
         leaveRequestRepository.delete(request);
         audit("LEAVE_REQUEST_DELETED", "Deleted leave request ID: " + request.getId());
@@ -116,7 +116,7 @@ public class LeaveRequestService {
                 .orElseThrow(() -> new RuntimeException(
                         "Leave request not found with id: " + id));
         if (!"PENDING".equals(request.getStatus())) {
-            throw new IllegalStateException("Only pending leave requests can change status");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can change status");
         }
         return request;
     }
@@ -149,7 +149,7 @@ public class LeaveRequestService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user is required");
         }
         User user = userRepository.findByUsername(auth.getName())
-                .orElseThrow(() -> new IllegalStateException("User account not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User account not found"));
         if (user.getPersonnel() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Your account is not linked to a personnel record. Contact an administrator.");
