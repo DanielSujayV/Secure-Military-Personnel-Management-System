@@ -37,6 +37,7 @@ public class PersonnelService {
 
     public Personnel createPersonnel(Personnel personnel) {
         validatePersonnel(personnel, null);
+        normalizePersonnel(personnel);
         personnel.setUnit(resolveUnit(personnel.getUnit()));
         Personnel saved = personnelRepository.save(personnel);
         audit("PERSONNEL_CREATED", "Created personnel: " + saved.getFullName()
@@ -62,10 +63,14 @@ public class PersonnelService {
     }
 
     public Personnel updatePersonnel(Personnel personnel) {
+        if (personnel == null || personnel.getId() == null) {
+            throw new IllegalArgumentException("Personnel ID is required");
+        }
         Personnel existing = personnelRepository.findById(personnel.getId())
                 .orElseThrow(() -> new RuntimeException(
                         "Personnel not found with id: " + personnel.getId()));
         validatePersonnel(personnel, personnel.getId());
+        normalizePersonnel(personnel);
 
         existing.setServiceNumber(personnel.getServiceNumber());
         existing.setFullName(personnel.getFullName());
@@ -99,6 +104,14 @@ public class PersonnelService {
                         HttpStatus.NOT_FOUND, "Assigned unit was not found"));
     }
 
+    private void normalizePersonnel(Personnel personnel) {
+        personnel.setServiceNumber(personnel.getServiceNumber().trim());
+        personnel.setFullName(personnel.getFullName().trim());
+        if (personnel.getRank() != null) personnel.setRank(personnel.getRank().trim());
+        if (personnel.getEmail() != null) personnel.setEmail(personnel.getEmail().trim());
+        if (personnel.getPhone() != null) personnel.setPhone(personnel.getPhone().trim());
+    }
+
     private void validatePersonnel(Personnel personnel, Long currentId) {
         if (personnel == null) {
             throw new IllegalArgumentException("Personnel details are required");
@@ -113,9 +126,9 @@ public class PersonnelService {
             throw new IllegalArgumentException("A unit must be assigned to the personnel record");
         }
         boolean duplicate = currentId == null
-                ? personnelRepository.existsByServiceNumber(personnel.getServiceNumber())
+                ? personnelRepository.existsByServiceNumber(personnel.getServiceNumber().trim())
                 : personnelRepository.existsByServiceNumberAndIdNot(
-                        personnel.getServiceNumber(), currentId);
+                        personnel.getServiceNumber().trim(), currentId);
         if (duplicate) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Service number is already assigned");
