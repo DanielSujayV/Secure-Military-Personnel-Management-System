@@ -175,7 +175,10 @@ function Dashboard() {
                 <div className="system-status" key={key}>
                   <span
                     className="status-indicator"
-                    style={{ opacity: loading ? 0.45 : available ? 1 : 0.35 }}
+                    style={{
+                      backgroundColor: loading ? "#9ca3af" : available ? "#16a34a" : "#dc2626",
+                      opacity: 1,
+                    }}
                   />
                   <div>
                     <strong>{label}</strong>
