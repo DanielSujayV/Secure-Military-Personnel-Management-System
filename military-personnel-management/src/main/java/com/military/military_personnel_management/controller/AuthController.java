@@ -322,6 +322,13 @@ public class AuthController {
                 );
             }
 
+            // Upgrade legacy plaintext TOTP secrets after a successful verification.
+            if (!totpSecretCryptoService.isEncrypted(credential.getSecret())) {
+                credential.setSecret(totpSecretCryptoService.encrypt(
+                        totpSecretCryptoService.decrypt(credential.getSecret())));
+                totpCredentialRepository.save(credential);
+            }
+
             auditLogService.createAuditLog(
                     new AuditLog(
                             username,
