@@ -26,6 +26,8 @@ public class UnitService {
 
     public Unit createUnit(Unit unit) {
         validateUnit(unit, null);
+        unit.setUnitName(unit.getUnitName().trim());
+        if (unit.getDescription() != null) unit.setDescription(unit.getDescription().trim());
         Unit saved = unitRepository.save(unit);
         audit("UNIT_CREATED", "Created unit: " + saved.getUnitName());
         return saved;
