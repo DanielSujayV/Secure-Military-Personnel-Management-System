@@ -1,4 +1,3 @@
-
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -11,7 +10,7 @@ function Sidebar() {
         sessionStorage.removeItem("tpmChallengeId");
         sessionStorage.removeItem("tpmDeviceId");
         sessionStorage.removeItem("tpmChallenge");
-        navigate("/login");
+        navigate("/login", { replace: true });
     };
 
     const linksByRole = {
@@ -24,27 +23,22 @@ function Sidebar() {
             { to: "/audit", label: "Audit Logs" },
         ],
         COMMANDER: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/units", label: "Units" },
             { to: "/leave", label: "Leave Management" },
             { to: "/promotions", label: "Promotions" },
         ],
         OFFICER: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/leave", label: "Leave Management" },
         ],
         PERSONNEL: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/leave", label: "Leave Management" },
         ],
     };
 
-    const links = linksByRole[role] || [
-        { to: "/dashboard", label: "Dashboard" },
-    ];
+    const links = linksByRole[role] || [];
 
     return (
         <aside className="sidebar">
@@ -56,7 +50,7 @@ function Sidebar() {
                 </div>
             </div>
 
-            <nav className="sidebar-nav">
+            <nav className="sidebar-nav" aria-label="Main navigation">
                 {links.map((link) => (
                     <NavLink key={link.to} to={link.to}>
                         {link.label}
