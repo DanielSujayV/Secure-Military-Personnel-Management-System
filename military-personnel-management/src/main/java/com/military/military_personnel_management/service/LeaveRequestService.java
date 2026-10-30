@@ -9,6 +9,8 @@ import com.military.military_personnel_management.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -144,12 +146,12 @@ public class LeaveRequestService {
     private Personnel getCurrentPersonnel() {
         Authentication auth = currentAuthentication();
         if (auth == null) {
-            throw new IllegalStateException("Authenticated user is required");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user is required");
         }
         User user = userRepository.findByUsername(auth.getName())
                 .orElseThrow(() -> new IllegalStateException("User account not found"));
         if (user.getPersonnel() == null) {
-            throw new IllegalStateException(
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Your account is not linked to a personnel record. Contact an administrator.");
         }
         return user.getPersonnel();
