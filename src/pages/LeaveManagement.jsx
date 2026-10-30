@@ -43,14 +43,17 @@ function LeaveManagement() {
       setLoading(true);
       setError("");
 
-      const [leaveResponse, personnelResponse] =
+      const [leaveResponse, personnelResponse, profileResponse] =
         await Promise.all([
           fetch(`${API_BASE_URL}/leave-requests`, {
             method: "GET",
             headers: getHeaders(),
           }),
-
           fetch(`${API_BASE_URL}/personnel`, {
+            method: "GET",
+            headers: getHeaders(),
+          }),
+          fetch(`${API_BASE_URL}/auth/me`, {
             method: "GET",
             headers: getHeaders(),
           }),
@@ -67,12 +70,22 @@ function LeaveManagement() {
           `Failed to load personnel (${personnelResponse.status})`
         );
       }
+      if (!profileResponse.ok) {
+        throw new Error("Unable to identify the signed-in user.");
+      }
 
       const leaveData = await leaveResponse.json();
       const personnelData = await personnelResponse.json();
+      const profile = await profileResponse.json();
+      const visiblePersonnel = canReviewLeave
+        ? personnelData
+        : personnelData.filter((person) => String(person.id) === String(profile.personnelId));
 
       setLeaves(leaveData);
-      setPersonnelList(personnelData);
+      setPersonnelList(visiblePersonnel);
+      if (!canReviewLeave && !profile.personnelId) {
+        setError("Your account is not linked to a personnel record. Contact an administrator.");
+      }
     } catch (err) {
       console.error(err);
 
@@ -163,7 +176,7 @@ function LeaveManagement() {
 
   const openAddForm = () => {
     setFormData({
-      personnelId: "",
+      personnelId: canReviewLeave ? "" : String(personnelList[0]?.id || ""),
       type: "",
       from: "",
       to: "",
@@ -440,29 +453,30 @@ function LeaveManagement() {
 
               <div className="input-group">
                 <label>Personnel Name</label>
-
-                <select
-                  name="personnelId"
-                  value={formData.personnelId}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">
-                    Select Personnel
-                  </option>
-
-                  {personnelList.map(
-                    (person) => (
-                      <option
-                        key={person.id}
-                        value={person.id}
-                      >
-                        {person.fullName} (
-                        {person.serviceNumber})
+                {canReviewLeave ? (
+                  <select
+                    name="personnelId"
+                    value={formData.personnelId}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Select Personnel</option>
+                    {personnelList.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.fullName} ({person.serviceNumber})
                       </option>
-                    )
-                  )}
-                </select>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={personnelList[0]
+                      ? `${personnelList[0].fullName} (${personnelList[0].serviceNumber})`
+                      : "No linked personnel record"}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                )}
               </div>
 
               <div className="input-group">
