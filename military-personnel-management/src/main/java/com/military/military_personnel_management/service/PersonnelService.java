@@ -8,6 +8,8 @@ import com.military.military_personnel_management.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -85,7 +87,7 @@ public class PersonnelService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user record not found"));
         if (user.getPersonnel() == null) {
-            throw new IllegalStateException(
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This account is not linked to a personnel record. Contact an administrator.");
         }
         return Optional.of(user.getPersonnel());
