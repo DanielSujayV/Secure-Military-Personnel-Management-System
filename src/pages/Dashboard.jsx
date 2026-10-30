@@ -1,154 +1,192 @@
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../services/api";
+import { useAuth } from "../context/AuthContext";
+
+const emptyData = {
+  personnel: [],
+  units: [],
+  leaves: [],
+  promotions: [],
+  auditLogs: [],
+};
+
 function Dashboard() {
+  const { username } = useAuth();
+  const [data, setData] = useState(emptyData);
+  const [sourceStatus, setSourceStatus] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDashboard = async () => {
+      setLoading(true);
+      setError("");
+
+      const sources = [
+        ["personnel", "/personnel"],
+        ["units", "/units"],
+        ["leaves", "/leave-requests"],
+        ["promotions", "/promotions"],
+        ["auditLogs", "/audit-logs"],
+      ];
+
+      const results = await Promise.allSettled(
+        sources.map(([, endpoint]) => api.get(endpoint))
+      );
+
+      if (cancelled) return;
+
+      const nextData = { ...emptyData };
+      const nextStatus = {};
+      let failures = 0;
+
+      results.forEach((result, index) => {
+        const [key] = sources[index];
+        if (result.status === "fulfilled" && Array.isArray(result.value)) {
+          nextData[key] = result.value;
+          nextStatus[key] = "Available";
+        } else {
+          nextStatus[key] = "Unavailable";
+          failures += 1;
+        }
+      });
+
+      setData(nextData);
+      setSourceStatus(nextStatus);
+      if (failures > 0) {
+        setError(`${failures} dashboard data source(s) could not be loaded. Check the API and your permissions.`);
+      }
+      setLoading(false);
+    };
+
+    loadDashboard();
+    return () => { cancelled = true; };
+  }, []);
+
+  const pendingLeaveCount = useMemo(
+    () => data.leaves.filter((item) =>
+      String(item.status || "").toUpperCase() === "PENDING"
+    ).length,
+    [data.leaves]
+  );
+
+  const recentActivity = useMemo(
+    () => [...data.auditLogs]
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+      .slice(0, 6),
+    [data.auditLogs]
+  );
+
+  const formatTimestamp = (value) => {
+    if (!value) return "Time unavailable";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  };
+
+  const getActivityTitle = (action) => {
+    if (!action) return "System activity";
+    return action.replaceAll("_", " ").toLowerCase()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  };
+
+  const statCards = [
+    { title: "Total Personnel", value: data.personnel.length, description: "Personnel records" },
+    { title: "Registered Units", value: data.units.length, description: "Configured units" },
+    { title: "Pending Leave", value: pendingLeaveCount, description: "Awaiting review" },
+    { title: "Promotion Records", value: data.promotions.length, description: "Recorded promotions" },
+  ];
+
   return (
     <div className="dashboard">
-
       <div className="dashboard-header">
         <div>
           <h1>Dashboard</h1>
           <p>Military Personnel Management System</p>
         </div>
-
         <div className="user-info">
-          <strong>Administrator</strong>
+          <strong>{username || "Administrator"}</strong>
           <span>System Administrator</span>
         </div>
       </div>
 
-
       <div className="welcome-section">
-        <h2>Welcome back, Administrator</h2>
-        <p>
-          Here's an overview of the current personnel management system.
-        </p>
+        <h2>Welcome back, {username || "Administrator"}</h2>
+        <p>Live overview from the personnel management database.</p>
       </div>
 
+      {error && (
+        <div className="login-error" role="alert" style={{ marginBottom: "20px" }}>
+          {error}
+        </div>
+      )}
 
       <div className="stats-grid">
-
-        <div className="stat-card">
-          <span className="stat-title">Total Personnel</span>
-          <strong className="stat-number">245</strong>
-          <span className="stat-description">
-            Registered personnel
-          </span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-title">Active Units</span>
-          <strong className="stat-number">12</strong>
-          <span className="stat-description">
-            Registered units
-          </span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-title">Pending Leave</span>
-          <strong className="stat-number">18</strong>
-          <span className="stat-description">
-            Awaiting approval
-          </span>
-        </div>
-
-        <div className="stat-card">
-          <span className="stat-title">Pending Promotions</span>
-          <strong className="stat-number">7</strong>
-          <span className="stat-description">
-            Awaiting review
-          </span>
-        </div>
-
+        {statCards.map((card) => (
+          <div className="stat-card" key={card.title}>
+            <span className="stat-title">{card.title}</span>
+            <strong className="stat-number">
+              {loading ? "—" : card.value}
+            </strong>
+            <span className="stat-description">{card.description}</span>
+          </div>
+        ))}
       </div>
 
-
       <div className="dashboard-grid">
-
         <div className="dashboard-card">
           <div className="card-header">
             <h2>Recent Activity</h2>
-            <span>Latest</span>
+            <span>{recentActivity.length} latest events</span>
           </div>
 
           <div className="activity-list">
-
-            <div className="activity-item">
-              <div>
-                <strong>Personnel record updated</strong>
-                <p>MP001 · Arun Kumar</p>
+            {loading ? (
+              <p>Loading recent activity...</p>
+            ) : recentActivity.length === 0 ? (
+              <p>No audit activity has been recorded yet.</p>
+            ) : recentActivity.map((item) => (
+              <div className="activity-item" key={item.id}>
+                <div>
+                  <strong>{getActivityTitle(item.action)}</strong>
+                  <p>{item.details || item.username || "System event"}</p>
+                </div>
+                <span>{formatTimestamp(item.timestamp)}</span>
               </div>
-
-              <span>10:42 AM</span>
-            </div>
-
-            <div className="activity-item">
-              <div>
-                <strong>Leave request approved</strong>
-                <p>MP014 · Casual Leave</p>
-              </div>
-
-              <span>10:18 AM</span>
-            </div>
-
-            <div className="activity-item">
-              <div>
-                <strong>New personnel added</strong>
-                <p>MP246 · Personnel Registration</p>
-              </div>
-
-              <span>09:55 AM</span>
-            </div>
-
-            <div className="activity-item">
-              <div>
-                <strong>Promotion record updated</strong>
-                <p>MP032 · Rank Update</p>
-              </div>
-
-              <span>09:21 AM</span>
-            </div>
-
+            ))}
           </div>
         </div>
-
 
         <div className="dashboard-card">
           <div className="card-header">
-            <h2>System Status</h2>
+            <h2>Data Source Status</h2>
           </div>
-
           <div className="status-list">
-
-            <div className="system-status">
-              <span className="status-indicator"></span>
-
-              <div>
-                <strong>Authentication</strong>
-                <p>System operational</p>
-              </div>
-            </div>
-
-            <div className="system-status">
-              <span className="status-indicator"></span>
-
-              <div>
-                <strong>Database</strong>
-                <p>System operational</p>
-              </div>
-            </div>
-
-            <div className="system-status">
-              <span className="status-indicator"></span>
-
-              <div>
-                <strong>Security Services</strong>
-                <p>System operational</p>
-              </div>
-            </div>
-
+            {[
+              ["Personnel API", "personnel"],
+              ["Units API", "units"],
+              ["Leave API", "leaves"],
+              ["Promotions API", "promotions"],
+              ["Audit Log API", "auditLogs"],
+            ].map(([label, key]) => {
+              const available = sourceStatus[key] === "Available";
+              return (
+                <div className="system-status" key={key}>
+                  <span
+                    className="status-indicator"
+                    style={{ opacity: loading ? 0.45 : available ? 1 : 0.35 }}
+                  />
+                  <div>
+                    <strong>{label}</strong>
+                    <p>{loading ? "Checking..." : sourceStatus[key] || "Not checked"}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-
       </div>
-
     </div>
   );
 }
