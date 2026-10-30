@@ -6,6 +6,8 @@ import com.military.military_personnel_management.entity.User;
 import com.military.military_personnel_management.repository.PersonnelRepository;
 import com.military.military_personnel_management.repository.UserRepository;
 import com.military.military_personnel_management.repository.UnitRepository;
+import com.military.military_personnel_management.repository.LeaveRequestRepository;
+import com.military.military_personnel_management.repository.PromotionRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -22,16 +24,22 @@ public class PersonnelService {
     private final PersonnelRepository personnelRepository;
     private final UserRepository userRepository;
     private final UnitRepository unitRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
+    private final PromotionRepository promotionRepository;
     private final AuditLogService auditLogService;
 
     public PersonnelService(
             PersonnelRepository personnelRepository,
             UserRepository userRepository,
             UnitRepository unitRepository,
+            LeaveRequestRepository leaveRequestRepository,
+            PromotionRepository promotionRepository,
             AuditLogService auditLogService) {
         this.personnelRepository = personnelRepository;
         this.userRepository = userRepository;
         this.unitRepository = unitRepository;
+        this.leaveRequestRepository = leaveRequestRepository;
+        this.promotionRepository = promotionRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -89,6 +97,21 @@ public class PersonnelService {
         Personnel personnel = personnelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException(
                         "Personnel not found with id: " + id));
+        if (userRepository.existsByPersonnel_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Personnel record is linked to a user account and cannot be deleted");
+        }
+        if (leaveRequestRepository.existsByPersonnel_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Personnel record has leave history and cannot be deleted");
+        }
+        if (promotionRepository.existsByPersonnel_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Personnel record has promotion history and cannot be deleted");
+        }
         personnelRepository.deleteById(id);
         audit("PERSONNEL_DELETED", "Deleted personnel: " + personnel.getFullName()
                 + " (Service No: " + personnel.getServiceNumber() + ")");
