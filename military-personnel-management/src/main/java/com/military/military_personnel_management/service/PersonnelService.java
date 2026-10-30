@@ -75,8 +75,8 @@ public class PersonnelService {
             throw new IllegalArgumentException("Personnel ID is required");
         }
         Personnel existing = personnelRepository.findById(personnel.getId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Personnel not found with id: " + personnel.getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Personnel record not found"));
         validatePersonnel(personnel, personnel.getId());
         normalizePersonnel(personnel);
 
@@ -95,8 +95,8 @@ public class PersonnelService {
 
     public void deletePersonnel(Long id) {
         Personnel personnel = personnelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
-                        "Personnel not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Personnel record not found"));
         if (userRepository.existsByPersonnel_Id(id)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -165,7 +165,8 @@ public class PersonnelService {
     private Optional<Personnel> currentLinkedPersonnel() {
         String username = currentAuthentication().getName();
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalStateException("Authenticated user record not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Authenticated user record not found"));
         if (user.getPersonnel() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "This account is not linked to a personnel record. Contact an administrator.");
