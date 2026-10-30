@@ -27,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -345,7 +346,7 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public Map<String, String> getCurrentUser(
+    public Map<String, Object> getCurrentUser(
             @RequestHeader(
                     value = "Authorization",
                     required = false
@@ -385,10 +386,12 @@ public class AuthController {
                                     "User not found"
                             ));
 
-            return Map.of(
-                    "username", user.getUsername(),
-                    "role", user.getRole().getRoleName()
-            );
+            Map<String, Object> profile = new HashMap<>();
+            profile.put("username", user.getUsername());
+            profile.put("role", user.getRole().getRoleName());
+            profile.put("personnelId",
+                    user.getPersonnel() == null ? null : user.getPersonnel().getId());
+            return profile;
 
         } catch (ResponseStatusException ex) {
             throw ex;
