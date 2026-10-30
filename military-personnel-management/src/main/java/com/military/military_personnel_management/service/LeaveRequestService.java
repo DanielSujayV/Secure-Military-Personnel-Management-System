@@ -71,8 +71,8 @@ public class LeaveRequestService {
             throw new IllegalArgumentException("Leave request ID is required");
         }
         LeaveRequest existing = leaveRequestRepository.findById(request.getId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Leave request not found with id: " + request.getId()));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Leave request not found"));
 
         if (!"PENDING".equals(existing.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can be edited");
@@ -106,8 +106,8 @@ public class LeaveRequestService {
 
     public void deleteLeaveRequest(Long id) {
         LeaveRequest request = leaveRequestRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException(
-                        "Leave request not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Leave request not found"));
         if (!"PENDING".equals(request.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can be deleted");
         }
