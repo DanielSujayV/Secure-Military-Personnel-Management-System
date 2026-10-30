@@ -46,7 +46,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
 - Maven 3.9+ (or the included Maven Wrapper)
 - MySQL
 - Node.js compatible with the installed Vite version
-- .NET SDK compatible with the TPM helper project
+- .NET 10 SDK
 - Windows with a supported TPM 2.0 device for the current TPM helper implementation
 
 ## Backend setup
@@ -59,7 +59,6 @@ A user must have a registered TPM device and an enabled TOTP credential before t
    - `JWT_SECRET` — use a strong random secret of at least 32 bytes; do not commit it.
    - `TOTP_ENCRYPTION_KEY` — use a separate random secret of at least 32 characters; required for encrypting/decrypting TOTP secrets. Keep it stable and back it up securely because changing it makes existing encrypted TOTP credentials unreadable.
    - `TPM_HELPER_URL` — optional; defaults to `http://127.0.0.1:8765`.
-   - `TOTP_ENCRYPTION_KEY` — required for new TOTP enrollment; use a dedicated random value of at least 32 characters and keep it outside source control.
    - `APP_CORS_ALLOWED_ORIGINS` — comma-separated trusted frontend origins; defaults to `http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174`.
 
 3. Start the backend:
@@ -130,10 +129,28 @@ Existing accounts are not automatically linked to personnel records. Until an ac
 
 - Keep database credentials, JWT signing keys, and any local environment files out of source control.
 - Use HTTPS, secure secret storage, database encryption, rate limiting, and managed key rotation before any production use.
-- TOTP secrets are stored using AES-GCM encryption when `TOTP_ENCRYPTION_KEY` is configured. Existing legacy plaintext secrets remain readable for backward compatibility until reset. After configuring the key, an administrator can reset a user credential through the admin-only `/api/totp/setup-for-user` endpoint and confirm the new code through `/api/totp/confirm-for-user`; this replaces the legacy secret with encrypted storage. Keep the key backed up securely because losing it prevents TOTP verification.
+- TOTP secrets are stored using AES-256-GCM encryption. Legacy plaintext secrets remain readable for backward compatibility and are automatically re-encrypted after a successful TOTP login or enrollment confirmation when `TOTP_ENCRYPTION_KEY` is configured. Keep the key backed up securely because losing it prevents TOTP verification.
 - The TPM helper currently performs local TPM-backed signing; it is not a full remote-attestation protocol.
 - Use database migrations rather than relying on automatic schema updates for production.
 - Run backend tests, frontend production build, and role-by-role API tests before merging changes into `main`.
+
+## Tests and continuous integration
+
+Run the backend tests:
+
+```bash
+cd military-personnel-management
+./mvnw test
+```
+
+Run the frontend production build:
+
+```bash
+npm ci
+npm run build
+```
+
+The GitHub Actions workflow runs the frontend build, backend test suite with MySQL, and a Windows build of the .NET TPM helper on pushes to the development branch and on pull requests targeting `main`.
 
 ## Development branch
 
