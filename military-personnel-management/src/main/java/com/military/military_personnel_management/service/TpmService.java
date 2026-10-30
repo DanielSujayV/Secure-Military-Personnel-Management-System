@@ -8,6 +8,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 
 import java.security.KeyFactory;
@@ -23,8 +24,8 @@ import java.util.UUID;
 @Service
 public class TpmService {
 
-    private static final String TPM_HELPER_URL =
-            "http://127.0.0.1:8765";
+    @Value("${tpm.helper-url:http://127.0.0.1:8765}")
+    private String tpmHelperUrl;
 
     private final RestTemplate restTemplate;
     private final TrustedDeviceRepository trustedDeviceRepository;
@@ -50,7 +51,7 @@ public class TpmService {
 
         Map<String, Object> response =
                 restTemplate.postForObject(
-                        TPM_HELPER_URL + "/tpm/register",
+                        tpmHelperUrl + "/tpm/register",
                         request,
                         Map.class
                 );
