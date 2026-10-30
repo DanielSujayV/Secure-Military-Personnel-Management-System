@@ -41,6 +41,9 @@ const TPMVerification = () => {
                 if (!signResponse.ok || !signData.success || !signData.signature) {
                     throw new Error(signData.message || signData.error || "TPM signing failed.");
                 }
+                if (signData.deviceId && signData.deviceId !== deviceId) {
+                    throw new Error("The connected TPM device does not match the device registered to this account.");
+                }
 
                 setStatus("Verifying TPM signature...");
                 const verifyResponse = await fetch(`${API_BASE_URL}/auth/verify-tpm`, {
