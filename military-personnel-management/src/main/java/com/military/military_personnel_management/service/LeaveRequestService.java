@@ -7,7 +7,6 @@ import com.military.military_personnel_management.entity.User;
 import com.military.military_personnel_management.repository.LeaveRequestRepository;
 import com.military.military_personnel_management.repository.UserRepository;
 import com.military.military_personnel_management.repository.PersonnelRepository;
-import com.military.military_personnel_management.repository.PersonnelRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -158,15 +157,6 @@ public class LeaveRequestService {
     private boolean hasRole(Authentication auth, String role) {
         return auth != null && auth.getAuthorities().stream()
                 .anyMatch(authority -> role.equals(authority.getAuthority()));
-    }
-
-    private Personnel resolvePersonnel(Personnel supplied) {
-        if (supplied == null || supplied.getId() == null) {
-            throw new IllegalArgumentException("Personnel is required for this leave request");
-        }
-        return personnelRepository.findById(supplied.getId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Personnel record not found"));
     }
 
     private Personnel getCurrentPersonnel() {
