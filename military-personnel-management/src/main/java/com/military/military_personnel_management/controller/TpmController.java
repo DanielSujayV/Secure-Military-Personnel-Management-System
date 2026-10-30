@@ -36,6 +36,13 @@ public class TpmController {
         TrustedDevice device =
                 tpmService.registerDevice(username);
 
+        auditLogService.createAuditLog(new AuditLog(
+                username,
+                "TPM_DEVICE_REGISTERED",
+                "Registered TPM device for current user",
+                LocalDateTime.now()
+        ));
+
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "deviceId", device.getDeviceId(),
