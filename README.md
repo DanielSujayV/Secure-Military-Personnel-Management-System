@@ -57,6 +57,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
    - `DB_USERNAME`
    - `DB_PASSWORD`
    - `JWT_SECRET` — use a strong random secret of at least 32 bytes; do not commit it.
+   - `TPM_HELPER_URL` — optional; defaults to `http://127.0.0.1:8765`.
 
 3. Start the backend:
 
