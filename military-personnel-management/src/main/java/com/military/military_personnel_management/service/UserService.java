@@ -92,7 +92,8 @@ public class UserService {
         }
 
         Role role = roleRepository.findById(user.getRole().getId())
-                .orElseThrow(() -> new RuntimeException("Role not found"));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Role not found"));
 
         Personnel linkedPersonnel = existing.getPersonnel();
         if (user.getPersonnel() != null && user.getPersonnel().getId() != null) {
@@ -106,6 +107,10 @@ public class UserService {
         existing.setPersonnel(linkedPersonnel);
 
         if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            if (user.getPassword().length() < 12) {
+                throw new IllegalArgumentException(
+                        "Password must contain at least 12 characters");
+            }
             existing.setPassword(passwordEncoder.encode(user.getPassword()));
         }
 
