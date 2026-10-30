@@ -144,6 +144,7 @@ public class TpmService {
         );
 
         tpmChallenge.setDeviceId(deviceId);
+        tpmChallenge.setUsername(username);
 
         tpmChallenge.setChallenge(
                 challenge
@@ -175,6 +176,12 @@ public class TpmService {
                 .findByChallengeIdForUpdate(challengeId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "TPM challenge not found"));
+
+        if (challenge.getUsername() == null
+                || !challenge.getUsername().equals(username)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "TPM challenge does not belong to this account");
+        }
 
         if (challenge.isUsed()) {
             throw new ResponseStatusException(
