@@ -34,6 +34,7 @@ public class PromotionService {
 
     public Promotion createPromotion(Promotion promotion) {
         validatePromotion(promotion);
+        normalizePromotion(promotion);
         promotion.setPersonnel(resolvePersonnel(promotion.getPersonnel()));
         Promotion saved = promotionRepository.save(promotion);
         audit("PROMOTION_CREATED", describe(saved));
@@ -56,6 +57,7 @@ public class PromotionService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Promotion not found"));
         validatePromotion(promotion);
+        normalizePromotion(promotion);
         existing.setPersonnel(resolvePersonnel(promotion.getPersonnel()));
         existing.setPreviousRank(promotion.getPreviousRank().trim());
         existing.setNewRank(promotion.getNewRank().trim());
@@ -72,6 +74,14 @@ public class PromotionService {
                         HttpStatus.NOT_FOUND, "Promotion not found"));
         promotionRepository.delete(promotion);
         audit("PROMOTION_DELETED", describe(promotion));
+    }
+
+    private void normalizePromotion(Promotion promotion) {
+        promotion.setPreviousRank(promotion.getPreviousRank().trim());
+        promotion.setNewRank(promotion.getNewRank().trim());
+        if (promotion.getRemarks() != null) {
+            promotion.setRemarks(promotion.getRemarks().trim());
+        }
     }
 
     private void validatePromotion(Promotion promotion) {
