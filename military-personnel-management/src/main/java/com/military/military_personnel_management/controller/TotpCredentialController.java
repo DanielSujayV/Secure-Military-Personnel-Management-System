@@ -46,7 +46,7 @@ public class TotpCredentialController {
     // Existing self-enrollment endpoint
     @PostMapping("/setup")
     public TotpSetupResponse setup(Authentication authentication) {
-        return createSetup(authentication.getName(), authentication.getName());
+        return createSetup(authentication.getName(), authentication.getName(), false);
     }
 
     // Admin initiates TOTP enrollment for another account.
@@ -56,12 +56,13 @@ public class TotpCredentialController {
             @RequestParam String username,
             Authentication authentication) {
 
-        return createSetup(username, authentication.getName());
+        return createSetup(username, authentication.getName(), true);
     }
 
     private TotpSetupResponse createSetup(
             String targetUsername,
-            String actorUsername) {
+            String actorUsername,
+            boolean administratorReset) {
 
         User user = userRepository.findByUsername(targetUsername)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -69,11 +70,13 @@ public class TotpCredentialController {
 
         var existing = totpCredentialRepository.findByUserId(user.getId());
 
-        if (existing.isPresent() && existing.get().isEnabled()) {
+        if (existing.isPresent() && existing.get().isEnabled() && !administratorReset) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "TOTP is already enabled");
+                    HttpStatus.CONFLICT, "TOTP is already enabled; an administrator must reset it");
         }
 
+        boolean resettingEnabledCredential =
+                existing.isPresent() && existing.get().isEnabled();
         String secret = totpService.generateSecret();
         TotpCredential credential;
 
@@ -89,8 +92,10 @@ public class TotpCredentialController {
 
         auditLogService.createAuditLog(new AuditLog(
                 actorUsername,
-                "TOTP_SETUP",
-                "TOTP setup initiated for user: " + targetUsername,
+                resettingEnabledCredential ? "TOTP_RESET" : "TOTP_SETUP",
+                (resettingEnabledCredential
+                        ? "Administrator reset TOTP for user: "
+                        : "TOTP setup initiated for user: ") + targetUsername,
                 LocalDateTime.now()
         ));
 
@@ -100,7 +105,9 @@ public class TotpCredentialController {
         return new TotpSetupResponse(
                 secret,
                 otpauthUri,
-                "TOTP setup created. Add it to the user's authenticator app and confirm the generated code."
+                resettingEnabledCredential
+                        ? "TOTP reset. Add the new secret to the user's authenticator app and confirm the generated code."
+                        : "TOTP setup created. Add it to the user's authenticator app and confirm the generated code."
         );
     }
 
