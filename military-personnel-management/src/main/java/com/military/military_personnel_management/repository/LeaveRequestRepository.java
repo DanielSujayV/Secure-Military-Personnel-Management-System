@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
     List<LeaveRequest> findByPersonnel_Id(Long personnelId);
     Optional<LeaveRequest> findByIdAndPersonnel_Id(Long id, Long personnelId);
+    boolean existsByPersonnel_Id(Long personnelId);
 }
