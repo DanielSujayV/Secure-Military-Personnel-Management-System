@@ -18,6 +18,10 @@ public class TpmChallenge {
     @Column(nullable = false, length = 128)
     private String deviceId;
 
+    // Nullable only for compatibility with challenge rows created before owner binding.
+    @Column(length = 255)
+    private String username;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String challenge;
 
@@ -47,6 +51,14 @@ public class TpmChallenge {
 
     public String getDeviceId() {
         return deviceId;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public void setDeviceId(String deviceId) {
