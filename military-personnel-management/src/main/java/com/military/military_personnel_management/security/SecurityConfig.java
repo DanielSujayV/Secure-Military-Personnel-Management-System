@@ -1,4 +1,3 @@
-
 package com.military.military_personnel_management.security;
 
 import org.springframework.context.annotation.Bean;
@@ -20,6 +19,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final String[] PERSONNEL_READ_ROLES = {
+            "ROLE_ADMIN", "ROLE_COMMANDER", "ROLE_OFFICER", "ROLE_PERSONNEL"
+    };
+    private static final String[] PERSONNEL_MANAGE_ROLES = {
+            "ROLE_ADMIN", "ROLE_COMMANDER"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
@@ -35,122 +41,77 @@ public class SecurityConfig {
     public AuthenticationManager authenticationManager(
             CustomUserDetailsService userDetailsService,
             PasswordEncoder passwordEncoder) {
-
         DaoAuthenticationProvider authenticationProvider =
                 new DaoAuthenticationProvider(userDetailsService);
-
         authenticationProvider.setPasswordEncoder(passwordEncoder);
-
         return new ProviderManager(authenticationProvider);
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-
-                        // AUTHENTICATION
-                        .requestMatchers(
-                                HttpMethod.POST,
-                                "/api/auth/login"
-                        ).permitAll()
-
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-
-                        // SPRING BOOT ERROR HANDLING
                         .requestMatchers("/error").permitAll()
 
-                        // ADMIN-ONLY TOTP ENROLLMENT FOR OTHER USERS
+                        // Only administrators may provision credentials/devices for other users.
                         .requestMatchers(
                                 "/api/totp/setup-for-user",
-                                "/api/totp/confirm-for-user"
-                        ).hasAuthority("ROLE_ADMIN")
-
-                        // ADMIN-ONLY TPM REGISTRATION FOR OTHER USERS
-                        .requestMatchers(
+                                "/api/totp/confirm-for-user",
                                 "/api/tpm/register-for-user"
                         ).hasAuthority("ROLE_ADMIN")
 
-                        // USERS - ADMIN ONLY
-                        .requestMatchers(
-                                "/api/users",
-                                "/api/users/**"
-                        ).hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/api/users", "/api/users/**")
+                        .hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/api/roles", "/api/roles/**")
+                        .hasAuthority("ROLE_ADMIN")
 
-                        // ROLES - ADMIN ONLY
+                        // Personnel: all roles may read; only ADMIN and COMMANDER may mutate.
+                        .requestMatchers(HttpMethod.GET, "/api/personnel", "/api/personnel/**")
+                        .hasAnyAuthority(PERSONNEL_READ_ROLES)
                         .requestMatchers(
-                                "/api/roles",
-                                "/api/roles/**"
-                        ).hasAuthority("ROLE_ADMIN")
+                                HttpMethod.POST, "/api/personnel", "/api/personnel/**")
+                        .hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
+                        .requestMatchers(
+                                HttpMethod.PUT, "/api/personnel", "/api/personnel/**")
+                        .hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
+                        .requestMatchers(
+                                HttpMethod.DELETE, "/api/personnel", "/api/personnel/**")
+                        .hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
 
-                        // PERSONNEL
+                        // Leave: every role may view and submit. Only ADMIN/COMMANDER
+                        // may change, delete, approve, or reject an existing request.
+                        .requestMatchers(HttpMethod.GET, "/api/leave-requests", "/api/leave-requests/**")
+                        .hasAnyAuthority(PERSONNEL_READ_ROLES)
+                        .requestMatchers(HttpMethod.POST, "/api/leave-requests", "/api/leave-requests/**")
+                        .hasAnyAuthority(PERSONNEL_READ_ROLES)
                         .requestMatchers(
-                                "/api/personnel",
-                                "/api/personnel/**"
-                        ).hasAnyAuthority(
-                                "ROLE_ADMIN",
-                                "ROLE_COMMANDER",
-                                "ROLE_OFFICER",
-                                "ROLE_PERSONNEL"
-                        )
-
-                        // LEAVE APPROVAL / REJECTION - COMMANDER ONLY
-                        .requestMatchers(
-                                "/api/leave-requests/*/approve",
-                                "/api/leave-requests/*/reject"
-                        ).hasAuthority("ROLE_COMMANDER")
-
-                        // LEAVE REQUESTS
-                        .requestMatchers(
+                                HttpMethod.PUT,
                                 "/api/leave-requests",
                                 "/api/leave-requests/**"
-                        ).hasAnyAuthority(
-                                "ROLE_ADMIN",
-                                "ROLE_COMMANDER",
-                                "ROLE_OFFICER",
-                                "ROLE_PERSONNEL"
-                        )
-
-                        // PROMOTIONS
+                        ).hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
                         .requestMatchers(
-                                "/api/promotions",
-                                "/api/promotions/**"
-                        ).hasAnyAuthority(
-                                "ROLE_ADMIN",
-                                "ROLE_COMMANDER"
-                        )
+                                HttpMethod.DELETE,
+                                "/api/leave-requests",
+                                "/api/leave-requests/**"
+                        ).hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
 
-                        // UNITS
-                        .requestMatchers(
-                                "/api/units",
-                                "/api/units/**"
-                        ).hasAnyAuthority(
-                                "ROLE_ADMIN",
-                                "ROLE_COMMANDER"
-                        )
+                        .requestMatchers("/api/promotions", "/api/promotions/**")
+                        .hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
+                        .requestMatchers("/api/units", "/api/units/**")
+                        .hasAnyAuthority(PERSONNEL_MANAGE_ROLES)
+                        .requestMatchers("/api/audit-logs", "/api/audit-logs/**")
+                        .hasAuthority("ROLE_ADMIN")
 
-                        // AUDIT LOGS - ADMIN ONLY
-                        .requestMatchers(
-                                "/api/audit-logs",
-                                "/api/audit-logs/**"
-                        ).hasAuthority("ROLE_ADMIN")
-
-                        // ALL OTHER ENDPOINTS REQUIRE AUTHENTICATION
                         .anyRequest().authenticated()
                 )
-
-                // JWT AUTHENTICATION FILTER
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
