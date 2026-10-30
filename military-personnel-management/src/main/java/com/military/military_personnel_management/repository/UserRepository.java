@@ -12,4 +12,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsernameIgnoreCase(String username);
 
     boolean existsByUsernameIgnoreCaseAndIdNot(String username, Long id);
+    boolean existsByPersonnel_Id(Long personnelId);
 }
