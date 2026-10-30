@@ -7,7 +7,7 @@ import "./TOTPVerification.css";
 
 const TOTPVerification = () => {
     const navigate = useNavigate();
-    const { token, replaceToken, refreshUser, logout } = useAuth();
+    const { token, replaceToken, logout } = useAuth();
     const [code, setCode] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -49,12 +49,10 @@ const TOTPVerification = () => {
 
             // Replace the stage token through AuthContext; never update localStorage
             // directly from an authentication page.
+            // AuthContext loads the final token's profile once token state updates.
+            // The personnel route is available to all roles while that check completes.
             replaceToken(data.token, data.username);
-            const profile = await refreshUser(data.token);
-            const destination = String(profile?.role || "").toUpperCase() === "ADMIN"
-                ? "/dashboard"
-                : "/personnel";
-            navigate(destination, { replace: true });
+            navigate("/personnel", { replace: true });
         } catch (err) {
             setError(err.message || "TOTP verification failed.");
         } finally {
