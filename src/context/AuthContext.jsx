@@ -44,12 +44,14 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem("role", normalizedRole);
             setUsername(data.username);
             setRole(normalizedRole);
+            return data;
         } catch (error) {
             // Keep pre-authentication tokens in place for the TPM/TOTP flow,
             // but never treat them as authenticated application sessions.
             localStorage.removeItem("role");
             setRole(null);
             console.warn("User profile is not available yet:", error.message);
+            return null;
         } finally {
             setRoleLoading(false);
         }
