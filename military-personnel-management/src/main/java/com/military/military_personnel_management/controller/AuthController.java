@@ -15,6 +15,7 @@ import com.military.military_personnel_management.security.JwtService;
 import com.military.military_personnel_management.service.AuditLogService;
 import com.military.military_personnel_management.service.TpmService;
 import com.military.military_personnel_management.service.TotpService;
+import com.military.military_personnel_management.service.TotpSecretCryptoService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -42,6 +43,7 @@ public class AuthController {
     private final AuditLogService auditLogService;
     private final TrustedDeviceRepository trustedDeviceRepository;
     private final TpmService tpmService;
+    private final TotpSecretCryptoService totpSecretCryptoService;
 
     public AuthController(
             AuthenticationManager authenticationManager,
@@ -52,7 +54,8 @@ public class AuthController {
             UserDetailsService userDetailsService,
             AuditLogService auditLogService,
             TrustedDeviceRepository trustedDeviceRepository,
-            TpmService tpmService) {
+            TpmService tpmService,
+            TotpSecretCryptoService totpSecretCryptoService) {
 
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
@@ -63,6 +66,7 @@ public class AuthController {
         this.auditLogService = auditLogService;
         this.trustedDeviceRepository = trustedDeviceRepository;
         this.tpmService = tpmService;
+        this.totpSecretCryptoService = totpSecretCryptoService;
     }
 
     @PostMapping("/login")
@@ -298,7 +302,7 @@ public class AuthController {
             }
 
             boolean valid = totpService.verifyCode(
-                    credential.getSecret(),
+                    totpSecretCryptoService.decrypt(credential.getSecret()),
                     request.getCode()
             );
 
