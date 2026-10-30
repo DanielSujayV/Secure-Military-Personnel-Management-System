@@ -50,8 +50,11 @@ const TOTPVerification = () => {
             // Replace the stage token through AuthContext; never update localStorage
             // directly from an authentication page.
             replaceToken(data.token, data.username);
-            await refreshUser(data.token);
-            navigate("/dashboard", { replace: true });
+            const profile = await refreshUser(data.token);
+            const destination = String(profile?.role || "").toUpperCase() === "ADMIN"
+                ? "/dashboard"
+                : "/personnel";
+            navigate(destination, { replace: true });
         } catch (err) {
             setError(err.message || "TOTP verification failed.");
         } finally {
