@@ -1,0 +1,70 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+      - demo-readiness-prep
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: military_personnel_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: military-personnel-management/pom.xml
+
+      - name: Run backend tests
+        working-directory: military-personnel-management
+        env:
+          DB_USERNAME: root
+          DB_PASSWORD: root
+          JWT_SECRET: "ci-only-secret-key-at-least-thirty-two-characters-long"
+          TOTP_ENCRYPTION_KEY: "ci-only-totp-encryption-key-at-least-thirty-two-chars"
+        run: ./mvnw -B -ntp test
