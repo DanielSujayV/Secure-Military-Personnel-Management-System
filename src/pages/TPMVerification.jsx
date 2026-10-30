@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../services/api";
@@ -11,9 +11,11 @@ const TPMVerification = () => {
     const { token, replaceToken, logout } = useAuth();
     const [status, setStatus] = useState("Verifying TPM security...");
     const [error, setError] = useState("");
+    const startedRef = useRef(false);
 
     useEffect(() => {
-        let cancelled = false;
+        if (startedRef.current) return;
+        startedRef.current = true;
 
         const verifyTPM = async () => {
             try {
@@ -60,20 +62,15 @@ const TPMVerification = () => {
                 sessionStorage.removeItem("tpmDeviceId");
                 sessionStorage.removeItem("tpmChallenge");
 
-                if (!cancelled) {
-                    setStatus("TPM verification successful. Continuing...");
-                    navigate("/verify-totp", { replace: true });
-                }
+                setStatus("TPM verification successful. Continuing...");
+                navigate("/verify-totp", { replace: true });
             } catch (err) {
-                if (!cancelled) {
-                    setError(err.message || "TPM verification failed.");
-                    setStatus("TPM verification failed.");
-                }
+                setError(err.message || "TPM verification failed.");
+                setStatus("TPM verification failed.");
             }
         };
 
         verifyTPM();
-        return () => { cancelled = true; };
     }, [navigate, token, replaceToken]);
 
     const handleBackToLogin = () => {
