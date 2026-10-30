@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 
 import java.security.KeyFactory;
+import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Signature;
@@ -85,12 +86,36 @@ public class TpmService {
         String publicKey =
                 publicKeyValue.toString();
 
+        try {
+            byte[] decodedPublicKey = Base64.getDecoder().decode(publicKey);
+            String calculatedDeviceId = java.util.HexFormat.of()
+                    .withUpperCase()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(decodedPublicKey));
+            if (!calculatedDeviceId.equalsIgnoreCase(deviceId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "TPM helper returned a device ID that does not match its public key");
+            }
+            KeyFactory.getInstance("RSA").generatePublic(
+                    new X509EncodedKeySpec(decodedPublicKey));
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY, "TPM helper returned an invalid public key");
+        }
+
+        TrustedDevice existingOwner = trustedDeviceRepository.findByDeviceId(deviceId)
+                .orElse(null);
+        if (existingOwner != null && !existingOwner.getUsername().equals(username)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This TPM device is already registered to another account");
+        }
+
         TrustedDevice device =
                 trustedDeviceRepository
-                        .findByDeviceIdAndUsername(
-                                deviceId,
-                                username
-                        )
+                        .findByDeviceIdAndUsername(deviceId, username)
                         .orElse(new TrustedDevice());
 
         device.setDeviceId(deviceId);
@@ -171,6 +196,14 @@ public class TpmService {
             String challengeId,
             String deviceId,
             String signatureBase64) {
+
+        if (username == null || username.isBlank()
+                || challengeId == null || challengeId.isBlank()
+                || deviceId == null || deviceId.isBlank()
+                || signatureBase64 == null || signatureBase64.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "TPM verification details are incomplete");
+        }
 
         TpmChallenge challenge = tpmChallengeRepository
                 .findByChallengeIdForUpdate(challengeId)
