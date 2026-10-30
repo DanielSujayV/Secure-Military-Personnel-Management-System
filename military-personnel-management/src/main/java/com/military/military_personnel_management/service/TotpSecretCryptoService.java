@@ -2,6 +2,7 @@ package com.military.military_personnel_management.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import jakarta.annotation.PostConstruct;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -25,6 +26,14 @@ public class TotpSecretCryptoService {
     public TotpSecretCryptoService(
             @Value("${totp.encryption-key:}") String configuredKey) {
         this.configuredKey = configuredKey;
+    }
+
+    @PostConstruct
+    public void validateConfiguration() {
+        if (configuredKey == null || configuredKey.length() < 32) {
+            throw new IllegalStateException(
+                    "TOTP_ENCRYPTION_KEY must be configured with at least 32 characters");
+        }
     }
 
     public boolean isEncrypted(String value) {
