@@ -32,6 +32,7 @@ public class PersonnelService {
     }
 
     public Personnel createPersonnel(Personnel personnel) {
+        validatePersonnel(personnel, null);
         Personnel saved = personnelRepository.save(personnel);
         audit("PERSONNEL_CREATED", "Created personnel: " + saved.getFullName()
                 + " (Service No: " + saved.getServiceNumber() + ")");
@@ -59,6 +60,7 @@ public class PersonnelService {
         Personnel existing = personnelRepository.findById(personnel.getId())
                 .orElseThrow(() -> new RuntimeException(
                         "Personnel not found with id: " + personnel.getId()));
+        validatePersonnel(personnel, personnel.getId());
 
         existing.setServiceNumber(personnel.getServiceNumber());
         existing.setFullName(personnel.getFullName());
@@ -80,6 +82,33 @@ public class PersonnelService {
         personnelRepository.deleteById(id);
         audit("PERSONNEL_DELETED", "Deleted personnel: " + personnel.getFullName()
                 + " (Service No: " + personnel.getServiceNumber() + ")");
+    }
+
+    private void validatePersonnel(Personnel personnel, Long currentId) {
+        if (personnel == null) {
+            throw new IllegalArgumentException("Personnel details are required");
+        }
+        if (personnel.getServiceNumber() == null || personnel.getServiceNumber().isBlank()) {
+            throw new IllegalArgumentException("Service number is required");
+        }
+        if (personnel.getFullName() == null || personnel.getFullName().isBlank()) {
+            throw new IllegalArgumentException("Full name is required");
+        }
+        if (personnel.getUnit() == null || personnel.getUnit().getId() == null) {
+            throw new IllegalArgumentException("A unit must be assigned to the personnel record");
+        }
+        boolean duplicate = currentId == null
+                ? personnelRepository.existsByServiceNumber(personnel.getServiceNumber())
+                : personnelRepository.existsByServiceNumberAndIdNot(
+                        personnel.getServiceNumber(), currentId);
+        if (duplicate) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Service number is already assigned");
+        }
+        String email = personnel.getEmail();
+        if (email != null && !email.isBlank() && !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new IllegalArgumentException("Enter a valid email address");
+        }
     }
 
     private Optional<Personnel> currentLinkedPersonnel() {
