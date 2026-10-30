@@ -2,7 +2,9 @@ package com.military.military_personnel_management.service;
 
 import com.military.military_personnel_management.entity.AuditLog;
 import com.military.military_personnel_management.entity.Personnel;
+import com.military.military_personnel_management.entity.User;
 import com.military.military_personnel_management.repository.PersonnelRepository;
+import com.military.military_personnel_management.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -15,140 +17,92 @@ import java.util.Optional;
 public class PersonnelService {
 
     private final PersonnelRepository personnelRepository;
+    private final UserRepository userRepository;
     private final AuditLogService auditLogService;
 
     public PersonnelService(
             PersonnelRepository personnelRepository,
+            UserRepository userRepository,
             AuditLogService auditLogService) {
-
         this.personnelRepository = personnelRepository;
+        this.userRepository = userRepository;
         this.auditLogService = auditLogService;
     }
 
     public Personnel createPersonnel(Personnel personnel) {
-
-        Personnel savedPersonnel =
-                personnelRepository.save(personnel);
-
-        String username = getCurrentUsername();
-
-        auditLogService.createAuditLog(
-                new AuditLog(
-                        username,
-                        "PERSONNEL_CREATED",
-                        "Created personnel: "
-                                + savedPersonnel.getFullName()
-                                + " (Service No: "
-                                + savedPersonnel.getServiceNumber()
-                                + ")",
-                        LocalDateTime.now()
-                )
-        );
-
-        return savedPersonnel;
+        Personnel saved = personnelRepository.save(personnel);
+        audit("PERSONNEL_CREATED", "Created personnel: " + saved.getFullName()
+                + " (Service No: " + saved.getServiceNumber() + ")");
+        return saved;
     }
 
     public List<Personnel> getAllPersonnel() {
+        Authentication auth = currentAuthentication();
+        if (hasRole(auth, "ROLE_PERSONNEL")) {
+            return currentLinkedPersonnel().map(List::of).orElseGet(List::of);
+        }
         return personnelRepository.findAll();
     }
 
     public Optional<Personnel> getPersonnelById(Long id) {
+        Authentication auth = currentAuthentication();
+        if (hasRole(auth, "ROLE_PERSONNEL")) {
+            return currentLinkedPersonnel()
+                    .filter(personnel -> personnel.getId().equals(id));
+        }
         return personnelRepository.findById(id);
     }
 
     public Personnel updatePersonnel(Personnel personnel) {
+        Personnel existing = personnelRepository.findById(personnel.getId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Personnel not found with id: " + personnel.getId()));
 
-    Personnel existingPersonnel =
-            personnelRepository.findById(personnel.getId())
-                    .orElseThrow(() ->
-                            new RuntimeException(
-                                    "Personnel not found with id: "
-                                            + personnel.getId()
-                            ));
+        existing.setServiceNumber(personnel.getServiceNumber());
+        existing.setFullName(personnel.getFullName());
+        existing.setRank(personnel.getRank());
+        existing.setEmail(personnel.getEmail());
+        existing.setPhone(personnel.getPhone());
+        existing.setUnit(personnel.getUnit());
 
-    existingPersonnel.setServiceNumber(
-            personnel.getServiceNumber()
-    );
-
-    existingPersonnel.setFullName(
-            personnel.getFullName()
-    );
-
-    existingPersonnel.setRank(
-            personnel.getRank()
-    );
-
-    existingPersonnel.setEmail(
-            personnel.getEmail()
-    );
-
-    existingPersonnel.setPhone(
-            personnel.getPhone()
-    );
-
-    existingPersonnel.setUnit(
-            personnel.getUnit()
-    );
-
-    Personnel updatedPersonnel =
-            personnelRepository.save(existingPersonnel);
-
-    String username = getCurrentUsername();
-
-    auditLogService.createAuditLog(
-            new AuditLog(
-                    username,
-                    "PERSONNEL_UPDATED",
-                    "Updated personnel: "
-                            + updatedPersonnel.getFullName()
-                            + " (Service No: "
-                            + updatedPersonnel.getServiceNumber()
-                            + ")",
-                    LocalDateTime.now()
-            )
-    );
-
-    return updatedPersonnel;
-}
-
-    public void deletePersonnel(Long id) {
-
-        Personnel personnel =
-                personnelRepository.findById(id)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Personnel not found with id: " + id
-                                ));
-
-        personnelRepository.deleteById(id);
-
-        String username = getCurrentUsername();
-
-        auditLogService.createAuditLog(
-                new AuditLog(
-                        username,
-                        "PERSONNEL_DELETED",
-                        "Deleted personnel: "
-                                + personnel.getFullName()
-                                + " (Service No: "
-                                + personnel.getServiceNumber()
-                                + ")",
-                        LocalDateTime.now()
-                )
-        );
+        Personnel updated = personnelRepository.save(existing);
+        audit("PERSONNEL_UPDATED", "Updated personnel: " + updated.getFullName()
+                + " (Service No: " + updated.getServiceNumber() + ")");
+        return updated;
     }
 
-    private String getCurrentUsername() {
+    public void deletePersonnel(Long id) {
+        Personnel personnel = personnelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException(
+                        "Personnel not found with id: " + id));
+        personnelRepository.deleteById(id);
+        audit("PERSONNEL_DELETED", "Deleted personnel: " + personnel.getFullName()
+                + " (Service No: " + personnel.getServiceNumber() + ")");
+    }
 
-        Authentication authentication =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
-
-        if (authentication == null) {
-            return "SYSTEM";
+    private Optional<Personnel> currentLinkedPersonnel() {
+        String username = currentAuthentication().getName();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalStateException("Authenticated user record not found"));
+        if (user.getPersonnel() == null) {
+            throw new IllegalStateException(
+                    "This account is not linked to a personnel record. Contact an administrator.");
         }
+        return Optional.of(user.getPersonnel());
+    }
 
-        return authentication.getName();
+    private Authentication currentAuthentication() {
+        return SecurityContextHolder.getContext().getAuthentication();
+    }
+
+    private boolean hasRole(Authentication auth, String role) {
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(authority -> role.equals(authority.getAuthority()));
+    }
+
+    private void audit(String action, String details) {
+        auditLogService.createAuditLog(new AuditLog(
+                currentAuthentication() == null ? "SYSTEM" : currentAuthentication().getName(),
+                action, details, LocalDateTime.now()));
     }
 }
