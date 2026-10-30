@@ -27,7 +27,7 @@ A role-based personnel management application with a React frontend, Spring Boot
 | View audit logs | Yes | No | No | No |
 | Manage users and roles | Yes | No | No | No |
 
-The backend enforces permissions independently of frontend navigation and button visibility.
+The backend enforces permissions independently of frontend navigation and button visibility. Usernames must be 3–64 characters using letters, numbers, dots, underscores or hyphens. New passwords and password changes must contain at least 12 characters.
 
 ## Authentication flow
 
