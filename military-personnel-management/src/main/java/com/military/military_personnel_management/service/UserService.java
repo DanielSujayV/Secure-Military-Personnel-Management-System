@@ -1,8 +1,10 @@
 package com.military.military_personnel_management.service;
 
 import com.military.military_personnel_management.entity.AuditLog;
+import com.military.military_personnel_management.entity.Personnel;
 import com.military.military_personnel_management.entity.Role;
 import com.military.military_personnel_management.entity.User;
+import com.military.military_personnel_management.repository.PersonnelRepository;
 import com.military.military_personnel_management.repository.RoleRepository;
 import com.military.military_personnel_management.repository.UserRepository;
 import org.springframework.security.core.Authentication;
@@ -19,66 +21,45 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final PersonnelRepository personnelRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogService;
 
     public UserService(
             UserRepository userRepository,
             RoleRepository roleRepository,
+            PersonnelRepository personnelRepository,
             PasswordEncoder passwordEncoder,
             AuditLogService auditLogService) {
-
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.personnelRepository = personnelRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditLogService = auditLogService;
     }
 
-public User createUser(User user) {
+    public User createUser(User user) {
+        if (user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Password is required");
+        }
+        if (user.getRole() == null || user.getRole().getId() == null) {
+            throw new IllegalArgumentException("Role is required");
+        }
 
-    if (user.getUsername() == null
-            || user.getUsername().isBlank()) {
-        throw new IllegalArgumentException("Username is required");
+        Role role = roleRepository.findById(user.getRole().getId())
+                .orElseThrow(() -> new RuntimeException("Role not found"));
+        user.setRole(role);
+        user.setPersonnel(resolvePersonnel(user.getPersonnel()));
+
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        User saved = userRepository.save(user);
+        audit("USER_CREATED", "Created user: " + saved.getUsername()
+                + " with role: " + saved.getRole().getRoleName());
+        return saved;
     }
-
-    if (user.getPassword() == null
-            || user.getPassword().isBlank()) {
-        throw new IllegalArgumentException("Password is required");
-    }
-
-    if (user.getRole() == null
-            || user.getRole().getId() == null) {
-        throw new IllegalArgumentException("Role is required");
-    }
-
-    Role role = roleRepository.findById(
-            user.getRole().getId()
-    ).orElseThrow(() ->
-            new RuntimeException("Role not found")
-    );
-
-    user.setRole(role);
-
-    user.setPassword(
-            passwordEncoder.encode(user.getPassword())
-    );
-
-    User savedUser = userRepository.save(user);
-
-    auditLogService.createAuditLog(
-            new AuditLog(
-                    getCurrentUsername(),
-                    "USER_CREATED",
-                    "Created user: "
-                            + savedUser.getUsername()
-                            + " with role: "
-                            + savedUser.getRole().getRoleName(),
-                    LocalDateTime.now()
-            )
-    );
-
-    return savedUser;
-}
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
@@ -92,87 +73,53 @@ public User createUser(User user) {
         return userRepository.findByUsername(username);
     }
 
-public User updateUser(User user) {
+    public User updateUser(User user) {
+        User existing = userRepository.findById(user.getId())
+                .orElseThrow(() -> new RuntimeException(
+                        "User not found with id: " + user.getId()));
 
-    User existingUser = userRepository.findById(user.getId())
-            .orElseThrow(() ->
-                    new RuntimeException(
-                            "User not found with id: " + user.getId()
-                    ));
-
-    if (user.getRole() == null
-            || user.getRole().getId() == null) {
-        throw new IllegalArgumentException("Role is required");
-    }
-
-    Role role = roleRepository.findById(
-            user.getRole().getId()
-    ).orElseThrow(() ->
-            new RuntimeException("Role not found")
-    );
-
-        existingUser.setUsername(user.getUsername());
-        existingUser.setRole(role);
-        existingUser.setEnabled(user.isEnabled());
-
-        if (user.getPassword() != null
-                && !user.getPassword().isBlank()) {
-
-            existingUser.setPassword(
-                    passwordEncoder.encode(user.getPassword())
-            );
+        if (user.getRole() == null || user.getRole().getId() == null) {
+            throw new IllegalArgumentException("Role is required");
         }
 
-        User updatedUser =
-                userRepository.save(existingUser);
+        Role role = roleRepository.findById(user.getRole().getId())
+                .orElseThrow(() -> new RuntimeException("Role not found"));
 
-        auditLogService.createAuditLog(
-                new AuditLog(
-                        getCurrentUsername(),
-                        "USER_UPDATED",
-                        "Updated user: "
-                                + updatedUser.getUsername()
-                                + " with role: "
-                                + updatedUser.getRole().getRoleName(),
-                        LocalDateTime.now()
-                )
-        );
+        existing.setUsername(user.getUsername());
+        existing.setRole(role);
+        existing.setEnabled(user.isEnabled());
+        existing.setPersonnel(resolvePersonnel(user.getPersonnel()));
 
-        return updatedUser;
+        if (user.getPassword() != null && !user.getPassword().isBlank()) {
+            existing.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
+
+        User updated = userRepository.save(existing);
+        audit("USER_UPDATED", "Updated user: " + updated.getUsername()
+                + " with role: " + updated.getRole().getRoleName());
+        return updated;
     }
 
     public void deleteUser(Long id) {
-
         User user = userRepository.findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found with id: " + id
-                        ));
-
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
         userRepository.deleteById(id);
-
-        auditLogService.createAuditLog(
-                new AuditLog(
-                        getCurrentUsername(),
-                        "USER_DELETED",
-                        "Deleted user: "
-                                + user.getUsername(),
-                        LocalDateTime.now()
-                )
-        );
+        audit("USER_DELETED", "Deleted user: " + user.getUsername());
     }
 
-    private String getCurrentUsername() {
-
-        Authentication authentication =
-                SecurityContextHolder
-                        .getContext()
-                        .getAuthentication();
-
-        if (authentication == null) {
-            return "SYSTEM";
+    private Personnel resolvePersonnel(Personnel supplied) {
+        if (supplied == null || supplied.getId() == null) {
+            return null;
         }
+        return personnelRepository.findById(supplied.getId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Linked personnel record was not found"));
+    }
 
-        return authentication.getName();
+    private void audit(String action, String details) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        auditLogService.createAuditLog(new AuditLog(
+                auth == null ? "SYSTEM" : auth.getName(),
+                action, details, LocalDateTime.now()));
     }
 }
