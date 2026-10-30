@@ -3,8 +3,8 @@ import { useAuth } from "../context/AuthContext";
 
 function LeaveManagement() {
   const { role } = useAuth();
-  const canReviewLeave = role === "COMMANDER";
-  const canApplyLeave = role === "OFFICER" || role === "PERSONNEL";
+  const canReviewLeave = role === "ADMIN" || role === "COMMANDER";
+  const canApplyLeave = ["ADMIN", "COMMANDER", "OFFICER", "PERSONNEL"].includes(role);
   const API_BASE_URL = "http://localhost:8080/api";
 
   const [leaves, setLeaves] = useState([]);
@@ -323,6 +323,8 @@ function LeaveManagement() {
   };
 
   const handleDelete = async (leave) => {
+    if (!canReviewLeave) return;
+
     const confirmed = window.confirm(
       `Delete leave request #${leave.id}?`
     );
