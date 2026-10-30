@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
+import { API_BASE_URL } from "../services/api";
 
 function Units() {
-  const API_BASE_URL = "http://localhost:8080/api";
-
   const [units, setUnits] = useState([]);
 
   const [search, setSearch] = useState("");
