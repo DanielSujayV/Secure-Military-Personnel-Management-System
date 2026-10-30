@@ -59,7 +59,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
    - `JWT_SECRET` — use a strong random secret of at least 32 bytes; do not commit it.
    - `TPM_HELPER_URL` — optional; defaults to `http://127.0.0.1:8765`.
    - `TOTP_ENCRYPTION_KEY` — required for new TOTP enrollment; use a dedicated random value of at least 32 characters and keep it outside source control.
-   - `APP_CORS_ALLOWED_ORIGINS` — comma-separated trusted frontend origins; defaults to `http://localhost:5173,http://localhost:5174`.
+   - `APP_CORS_ALLOWED_ORIGINS` — comma-separated trusted frontend origins; defaults to `http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174`.
 
 3. Start the backend:
 
