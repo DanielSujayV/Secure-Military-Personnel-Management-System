@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../services/api";
 import "./TOTPVerification.css";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080/api";
 const TPM_HELPER_URL = import.meta.env.VITE_TPM_HELPER_URL || "http://127.0.0.1:8765";
 
 const TPMVerification = () => {
