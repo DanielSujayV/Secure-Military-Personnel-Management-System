@@ -81,7 +81,7 @@ protected void doFilterInternal(
                     response.setContentType("application/json");
 
                     response.getWriter().write(
-                            "{\"error\":\"TOTP verification required\"}"
+                            "{\"error\":\"Full TPM and TOTP verification required\"}"
                     );
 
                     return;
