@@ -72,7 +72,8 @@ public class UserController {
                                 user.getId(),
                                 user.getUsername(),
                                 user.getRole(),
-                                user.isEnabled()
+                                user.isEnabled(),
+                                user.getPersonnel() == null ? null : user.getPersonnel().getId()
                         )
                 ))
                 .orElse(ResponseEntity.notFound().build());
