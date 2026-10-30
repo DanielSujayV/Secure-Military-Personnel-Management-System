@@ -175,6 +175,10 @@ function LeaveManagement() {
   };
 
   const openAddForm = () => {
+    if (!canReviewLeave && personnelList.length === 0) {
+      setError("Your account must be linked to a personnel record before applying for leave.");
+      return;
+    }
     setFormData({
       personnelId: canReviewLeave ? "" : String(personnelList[0]?.id || ""),
       type: "",
@@ -409,6 +413,10 @@ function LeaveManagement() {
         {canApplyLeave && (<button
           className="primary-button"
           onClick={openAddForm}
+          disabled={!canReviewLeave && personnelList.length === 0}
+          title={!canReviewLeave && personnelList.length === 0
+            ? "Ask an administrator to link your account to a personnel record."
+            : undefined}
         >
           + Apply for Leave
         </button>)}
