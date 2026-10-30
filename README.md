@@ -43,7 +43,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
 ## Prerequisites
 
 - Java 21
-- Maven (or use the Maven wrapper if one is added to the project)
+- Maven 3.9+ (or the included Maven Wrapper)
 - MySQL
 - Node.js compatible with the installed Vite version
 - .NET SDK compatible with the TPM helper project
@@ -65,7 +65,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
 
    ```bash
    cd military-personnel-management
-   mvn spring-boot:run
+   ./mvnw spring-boot:run
    ```
 
 The API listens on `http://localhost:8080`.
@@ -101,7 +101,7 @@ On the Windows machine that owns the TPM device:
 dotnet run --project MilitaryPmsTpmHelper
 ```
 
-The helper listens on `http://127.0.0.1:8765`. Its current CORS development allowlist includes Vite on ports 5173 and 5174. The helper creates or opens a TPM-backed RSA key named `MilitaryPMS-TPM-Device-Key`.
+The helper listens on `http://127.0.0.1:8765`. Its current CORS development allowlist includes Vite on ports 5173 and 5174 using either `localhost` or `127.0.0.1`. The helper creates or opens a TPM-backed RSA key named `MilitaryPMS-TPM-Device-Key`.
 
 The TPM helper is a local development component. Do not expose it to untrusted networks or treat this prototype as a production remote-attestation service.
 
