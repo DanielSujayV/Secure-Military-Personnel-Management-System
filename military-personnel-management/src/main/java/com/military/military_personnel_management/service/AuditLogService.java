@@ -21,7 +21,7 @@ public class AuditLogService {
     }
 
     public List<AuditLog> getAllAuditLogs() {
-        return auditLogRepository.findAll();
+        return auditLogRepository.findAllByOrderByTimestampDesc();
     }
 
     public Optional<AuditLog> getAuditLogById(Long id) {
