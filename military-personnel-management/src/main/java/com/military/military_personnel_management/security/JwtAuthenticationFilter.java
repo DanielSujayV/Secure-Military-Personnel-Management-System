@@ -71,7 +71,8 @@ protected void doFilterInternal(
                 // Every non-authentication endpoint requires
                 // a fully verified TOTP token.
                 if (!isAuthPath
-                        && !jwtService.isTotpVerified(jwt)) {
+                        && (!jwtService.isTpmVerified(jwt)
+                        || !jwtService.isTotpVerified(jwt))) {
 
                     response.setStatus(
                             HttpServletResponse.SC_UNAUTHORIZED
