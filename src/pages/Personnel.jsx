@@ -1,8 +1,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-
-const API_BASE_URL = "http://localhost:8080/api";
+import { API_BASE_URL } from "../services/api";
 
 const emptyForm = {
     id: null,
