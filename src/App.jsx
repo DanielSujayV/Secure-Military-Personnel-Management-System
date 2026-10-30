@@ -16,41 +16,23 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/verify-tpm" element={<TPMVerification />} />
+      <Route path="/verify-totp" element={<TOTPVerification />} />
 
-      {/* Public routes */}
-      <Route
-        path="/"
-        element={<Navigate to="/login" replace />}
-      />
-
-      <Route
-        path="/login"
-        element={<Login />}
-      />
-
-      {/* TPM 2.0 hardware verification */}
-      <Route
-        path="/verify-tpm"
-        element={<TPMVerification />}
-      />
-
-      {/* TOTP verification */}
-      <Route
-        path="/verify-totp"
-        element={<TOTPVerification />}
-      />
-
-      {/* Protected routes */}
       <Route element={<ProtectedRoute />}>
-
-        <Route
-          path="/dashboard"
-          element={
-            <Layout>
-              <Dashboard />
-            </Layout>
-          }
-        />
+        {/* Dashboard is deliberately nested behind an Admin-only guard. */}
+        <Route element={<ProtectedRoute allowedRoles={["ADMIN"]} />}>
+          <Route
+            path="/dashboard"
+            element={
+              <Layout>
+                <Dashboard />
+              </Layout>
+            }
+          />
+        </Route>
 
         <Route
           path="/personnel"
@@ -96,9 +78,7 @@ function App() {
             </Layout>
           }
         />
-
       </Route>
-
     </Routes>
   );
 }

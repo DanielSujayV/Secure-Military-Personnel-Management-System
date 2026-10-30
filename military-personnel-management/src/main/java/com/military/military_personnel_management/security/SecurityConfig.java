@@ -1,4 +1,3 @@
-
 package com.military.military_personnel_management.security;
 
 import org.springframework.context.annotation.Bean;
@@ -70,6 +69,12 @@ public class SecurityConfig {
 
                         // SPRING BOOT ERROR HANDLING
                         .requestMatchers("/error").permitAll()
+
+                        // ADMIN DASHBOARD
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/admin/dashboard"
+                        ).hasAuthority("ROLE_ADMIN")
 
                         // ADMIN-ONLY TOTP ENROLLMENT FOR OTHER USERS
                         .requestMatchers(
@@ -150,7 +155,6 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
 
-                // JWT AUTHENTICATION FILTER
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class

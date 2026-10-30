@@ -1,4 +1,3 @@
-
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,6 +13,11 @@ function Sidebar() {
         navigate("/login");
     };
 
+    const normalizedRole = String(role || "")
+        .trim()
+        .toUpperCase()
+        .replace(/^ROLE_/, "");
+
     const linksByRole = {
         ADMIN: [
             { to: "/dashboard", label: "Dashboard" },
@@ -24,27 +28,22 @@ function Sidebar() {
             { to: "/audit", label: "Audit Logs" },
         ],
         COMMANDER: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/units", label: "Units" },
             { to: "/leave", label: "Leave Management" },
             { to: "/promotions", label: "Promotions" },
         ],
         OFFICER: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/leave", label: "Leave Management" },
         ],
         PERSONNEL: [
-            { to: "/dashboard", label: "Dashboard" },
             { to: "/personnel", label: "Personnel" },
             { to: "/leave", label: "Leave Management" },
         ],
     };
 
-    const links = linksByRole[role] || [
-        { to: "/dashboard", label: "Dashboard" },
-    ];
+    const links = linksByRole[normalizedRole] || [];
 
     return (
         <aside className="sidebar">
