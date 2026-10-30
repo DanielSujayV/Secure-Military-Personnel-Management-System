@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }) => {
         setRole(null);
     }, []);
 
-    const refreshUser = useCallback(() => loadRole(token), [loadRole, token]);
+    const refreshUser = useCallback((authToken = token) => loadRole(authToken), [loadRole, token]);
 
     const logout = useCallback(() => {
         localStorage.removeItem("token");
