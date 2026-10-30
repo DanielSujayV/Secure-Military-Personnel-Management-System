@@ -26,7 +26,8 @@ public class UserController {
                 createdUser.getId(),
                 createdUser.getUsername(),
                 createdUser.getRole(),
-                createdUser.isEnabled()
+                createdUser.isEnabled(),
+                createdUser.getPersonnel() == null ? null : createdUser.getPersonnel().getId()
         );
     }
 
@@ -38,7 +39,8 @@ public class UserController {
                         user.getId(),
                         user.getUsername(),
                         user.getRole(),
-                        user.isEnabled()
+                        user.isEnabled(),
+                        user.getPersonnel() == null ? null : user.getPersonnel().getId()
                 ))
                 .toList();
     }
@@ -53,7 +55,8 @@ public class UserController {
                                 user.getId(),
                                 user.getUsername(),
                                 user.getRole(),
-                                user.isEnabled()
+                                user.isEnabled(),
+                                user.getPersonnel() == null ? null : user.getPersonnel().getId()
                         )
                 ))
                 .orElse(ResponseEntity.notFound().build());
@@ -84,7 +87,8 @@ public class UserController {
                 updatedUser.getId(),
                 updatedUser.getUsername(),
                 updatedUser.getRole(),
-                updatedUser.isEnabled()
+                updatedUser.isEnabled(),
+                updatedUser.getPersonnel() == null ? null : updatedUser.getPersonnel().getId()
         );
     }
 
