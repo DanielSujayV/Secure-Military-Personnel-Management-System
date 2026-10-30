@@ -173,6 +173,11 @@ public class TotpCredentialController {
                     HttpStatus.UNAUTHORIZED, "Invalid TOTP code");
         }
 
+        // Upgrade legacy plaintext TOTP secrets after successful enrollment confirmation.
+        if (!totpSecretCryptoService.isEncrypted(credential.getSecret())) {
+            credential.setSecret(totpSecretCryptoService.encrypt(
+                    totpSecretCryptoService.decrypt(credential.getSecret())));
+        }
         credential.setEnabled(true);
         totpCredentialRepository.save(credential);
 
