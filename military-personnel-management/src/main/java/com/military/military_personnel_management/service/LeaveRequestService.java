@@ -6,6 +6,7 @@ import com.military.military_personnel_management.entity.Personnel;
 import com.military.military_personnel_management.entity.User;
 import com.military.military_personnel_management.repository.LeaveRequestRepository;
 import com.military.military_personnel_management.repository.UserRepository;
+import com.military.military_personnel_management.repository.PersonnelRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -21,14 +22,17 @@ public class LeaveRequestService {
 
     private final LeaveRequestRepository leaveRequestRepository;
     private final UserRepository userRepository;
+    private final PersonnelRepository personnelRepository;
     private final AuditLogService auditLogService;
 
     public LeaveRequestService(
             LeaveRequestRepository leaveRequestRepository,
             UserRepository userRepository,
+            PersonnelRepository personnelRepository,
             AuditLogService auditLogService) {
         this.leaveRequestRepository = leaveRequestRepository;
         this.userRepository = userRepository;
+        this.personnelRepository = personnelRepository;
         this.auditLogService = auditLogService;
     }
 
@@ -36,8 +40,8 @@ public class LeaveRequestService {
         validateDates(request);
         if (!isManager()) {
             request.setPersonnel(getCurrentPersonnel());
-        } else if (request.getPersonnel() == null || request.getPersonnel().getId() == null) {
-            throw new IllegalArgumentException("Personnel is required for this leave request");
+        } else {
+            request.setPersonnel(resolvePersonnel(request.getPersonnel()));
         }
 
         request.setStatus("PENDING");
@@ -63,7 +67,7 @@ public class LeaveRequestService {
     }
 
     public LeaveRequest updateLeaveRequest(LeaveRequest request) {
-        if (request.getId() == null) {
+        if (request == null || request.getId() == null) {
             throw new IllegalArgumentException("Leave request ID is required");
         }
         LeaveRequest existing = leaveRequestRepository.findById(request.getId())
@@ -74,7 +78,7 @@ public class LeaveRequestService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending leave requests can be edited");
         }
         validateDates(request);
-        existing.setPersonnel(request.getPersonnel());
+        existing.setPersonnel(resolvePersonnel(request.getPersonnel()));
         existing.setStartDate(request.getStartDate());
         existing.setEndDate(request.getEndDate());
         existing.setReason(request.getReason());
@@ -121,7 +125,19 @@ public class LeaveRequestService {
         return request;
     }
 
+    private Personnel resolvePersonnel(Personnel supplied) {
+        if (supplied == null || supplied.getId() == null) {
+            throw new IllegalArgumentException("Personnel is required for this leave request");
+        }
+        return personnelRepository.findById(supplied.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Personnel record not found"));
+    }
+
     private void validateDates(LeaveRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Leave request details are required");
+        }
         if (request.getStartDate() == null || request.getEndDate() == null) {
             throw new IllegalArgumentException("Leave start and end dates are required");
         }
