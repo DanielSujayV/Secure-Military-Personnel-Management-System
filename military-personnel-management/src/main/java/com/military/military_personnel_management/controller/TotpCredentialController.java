@@ -10,6 +10,7 @@ import com.military.military_personnel_management.repository.TotpCredentialRepos
 import com.military.military_personnel_management.repository.UserRepository;
 import com.military.military_personnel_management.service.AuditLogService;
 import com.military.military_personnel_management.service.TotpService;
+import com.military.military_personnel_management.service.TotpSecretCryptoService;
 
 import java.time.LocalDateTime;
 
@@ -26,17 +27,20 @@ public class TotpCredentialController {
     private final UserRepository userRepository;
     private final TotpService totpService;
     private final AuditLogService auditLogService;
+    private final TotpSecretCryptoService totpSecretCryptoService;
 
     public TotpCredentialController(
             TotpCredentialRepository totpCredentialRepository,
             UserRepository userRepository,
             TotpService totpService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService,
+            TotpSecretCryptoService totpSecretCryptoService) {
 
         this.totpCredentialRepository = totpCredentialRepository;
         this.userRepository = userRepository;
         this.totpService = totpService;
         this.auditLogService = auditLogService;
+        this.totpSecretCryptoService = totpSecretCryptoService;
     }
 
     // Existing self-enrollment endpoint
@@ -75,10 +79,10 @@ public class TotpCredentialController {
 
         if (existing.isPresent()) {
             credential = existing.get();
-            credential.setSecret(secret);
+            credential.setSecret(totpSecretCryptoService.encrypt(secret));
             credential.setEnabled(false);
         } else {
-            credential = new TotpCredential(user, secret);
+            credential = new TotpCredential(user, totpSecretCryptoService.encrypt(secret));
         }
 
         totpCredentialRepository.save(credential);
@@ -148,7 +152,7 @@ public class TotpCredentialController {
 
         boolean valid = request != null
                 && totpService.verifyCode(
-                        credential.getSecret(), request.getCode());
+                        totpSecretCryptoService.decrypt(credential.getSecret()), request.getCode());
 
         if (!valid) {
             auditLogService.createAuditLog(new AuditLog(
