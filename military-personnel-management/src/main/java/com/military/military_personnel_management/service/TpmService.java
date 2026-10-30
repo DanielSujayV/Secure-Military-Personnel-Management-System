@@ -8,6 +8,9 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 
@@ -161,127 +164,67 @@ public class TpmService {
         );
     }
 
+    @Transactional
     public boolean verifySignature(
             String username,
             String challengeId,
             String deviceId,
             String signatureBase64) {
 
-        TpmChallenge challenge =
-                tpmChallengeRepository
-                        .findByChallengeId(
-                                challengeId
-                        )
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "TPM challenge not found"
-                                )
-                        );
+        TpmChallenge challenge = tpmChallengeRepository
+                .findByChallengeIdForUpdate(challengeId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "TPM challenge not found"));
 
         if (challenge.isUsed()) {
-            throw new RuntimeException(
-                    "TPM challenge has already been used"
-            );
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "TPM challenge has already been used");
         }
 
-        if (challenge.getExpiresAt()
-                .isBefore(LocalDateTime.now())) {
-
-            throw new RuntimeException(
-                    "TPM challenge has expired"
-            );
+        if (challenge.getExpiresAt() == null
+                || !challenge.getExpiresAt().isAfter(LocalDateTime.now())) {
+            challenge.setUsed(true);
+            tpmChallengeRepository.save(challenge);
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "TPM challenge has expired");
         }
 
-        if (!challenge.getDeviceId()
-                .equals(deviceId)) {
-
-            throw new RuntimeException(
-                    "TPM device mismatch"
-            );
+        if (!challenge.getDeviceId().equals(deviceId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "TPM device mismatch");
         }
 
-        TrustedDevice device =
-                trustedDeviceRepository
-                        .findByDeviceIdAndUsername(
-                                deviceId,
-                                username
-                        )
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Trusted TPM device not found"
-                                )
-                        );
+        TrustedDevice device = trustedDeviceRepository
+                .findByDeviceIdAndUsername(deviceId, username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Trusted TPM device not found"));
 
         if (!device.isEnabled()) {
-            throw new RuntimeException(
-                    "Trusted TPM device is disabled"
-            );
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Trusted TPM device is disabled");
         }
 
+        // Consume the challenge while holding the row lock, including failed
+        // signature attempts. This prevents concurrent verification/replay.
+        challenge.setUsed(true);
+        tpmChallengeRepository.save(challenge);
+
         try {
+            byte[] publicKeyBytes = Base64.getDecoder().decode(device.getPublicKey());
+            byte[] signatureBytes = Base64.getDecoder().decode(signatureBase64);
+            byte[] challengeBytes = Base64.getDecoder().decode(challenge.getChallenge());
 
-            byte[] publicKeyBytes =
-                    Base64.getDecoder().decode(
-                            device.getPublicKey()
-                    );
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyBytes);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            PublicKey publicKey = keyFactory.generatePublic(keySpec);
 
-            byte[] signatureBytes =
-                    Base64.getDecoder().decode(
-                            signatureBase64
-                    );
-
-            byte[] challengeBytes =
-                    Base64.getDecoder().decode(
-                            challenge.getChallenge()
-                    );
-
-            X509EncodedKeySpec keySpec =
-                    new X509EncodedKeySpec(
-                            publicKeyBytes
-                    );
-
-            KeyFactory keyFactory =
-                    KeyFactory.getInstance("RSA");
-
-            PublicKey publicKey =
-                    keyFactory.generatePublic(
-                            keySpec
-                    );
-
-            Signature signature =
-                    Signature.getInstance(
-                            "SHA256withRSA"
-                    );
-
-            signature.initVerify(
-                    publicKey
-            );
-
-            signature.update(
-                    challengeBytes
-            );
-
-            boolean valid =
-                    signature.verify(
-                            signatureBytes
-                    );
-
-            if (valid) {
-                challenge.setUsed(true);
-
-                tpmChallengeRepository.save(
-                        challenge
-                );
-            }
-
-            return valid;
-
-        } catch (Exception e) {
-
-            throw new RuntimeException(
-                    "Failed to verify TPM signature",
-                    e
-            );
+            Signature verifier = Signature.getInstance("SHA256withRSA");
+            verifier.initVerify(publicKey);
+            verifier.update(challengeBytes);
+            return verifier.verify(signatureBytes);
+        } catch (Exception exception) {
+            // Do not reveal cryptographic parsing details to the caller.
+            return false;
         }
     }
 }
