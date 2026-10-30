@@ -58,6 +58,7 @@ A user must have a registered TPM device and an enabled TOTP credential before t
    - `DB_PASSWORD`
    - `JWT_SECRET` — use a strong random secret of at least 32 bytes; do not commit it.
    - `TPM_HELPER_URL` — optional; defaults to `http://127.0.0.1:8765`.
+   - `TOTP_ENCRYPTION_KEY` — required for new TOTP enrollment; use a dedicated random value of at least 32 characters and keep it outside source control.
 
 3. Start the backend:
 
@@ -127,7 +128,7 @@ Existing accounts are not automatically linked to personnel records. Until an ac
 
 - Keep database credentials, JWT signing keys, and any local environment files out of source control.
 - Use HTTPS, secure secret storage, database encryption, rate limiting, and managed key rotation before any production use.
-- TOTP secrets currently require a dedicated encryption-at-rest implementation and key-management policy before production.
+- TOTP secrets are stored using AES-GCM encryption when `TOTP_ENCRYPTION_KEY` is configured. Existing legacy plaintext secrets remain readable for backward compatibility until re-enrolled; rotate them after setting the key. Keep the key backed up securely because losing it prevents TOTP verification.
 - The TPM helper currently performs local TPM-backed signing; it is not a full remote-attestation protocol.
 - Use database migrations rather than relying on automatic schema updates for production.
 - Run backend tests, frontend production build, and role-by-role API tests before merging changes into `main`.
