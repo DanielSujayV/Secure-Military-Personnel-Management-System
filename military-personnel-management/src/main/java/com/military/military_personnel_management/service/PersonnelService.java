@@ -5,6 +5,7 @@ import com.military.military_personnel_management.entity.Personnel;
 import com.military.military_personnel_management.entity.User;
 import com.military.military_personnel_management.repository.PersonnelRepository;
 import com.military.military_personnel_management.repository.UserRepository;
+import com.military.military_personnel_management.repository.UnitRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -20,19 +21,23 @@ public class PersonnelService {
 
     private final PersonnelRepository personnelRepository;
     private final UserRepository userRepository;
+    private final UnitRepository unitRepository;
     private final AuditLogService auditLogService;
 
     public PersonnelService(
             PersonnelRepository personnelRepository,
             UserRepository userRepository,
+            UnitRepository unitRepository,
             AuditLogService auditLogService) {
         this.personnelRepository = personnelRepository;
         this.userRepository = userRepository;
+        this.unitRepository = unitRepository;
         this.auditLogService = auditLogService;
     }
 
     public Personnel createPersonnel(Personnel personnel) {
         validatePersonnel(personnel, null);
+        personnel.setUnit(resolveUnit(personnel.getUnit()));
         Personnel saved = personnelRepository.save(personnel);
         audit("PERSONNEL_CREATED", "Created personnel: " + saved.getFullName()
                 + " (Service No: " + saved.getServiceNumber() + ")");
@@ -67,7 +72,7 @@ public class PersonnelService {
         existing.setRank(personnel.getRank());
         existing.setEmail(personnel.getEmail());
         existing.setPhone(personnel.getPhone());
-        existing.setUnit(personnel.getUnit());
+        existing.setUnit(resolveUnit(personnel.getUnit()));
 
         Personnel updated = personnelRepository.save(existing);
         audit("PERSONNEL_UPDATED", "Updated personnel: " + updated.getFullName()
@@ -82,6 +87,16 @@ public class PersonnelService {
         personnelRepository.deleteById(id);
         audit("PERSONNEL_DELETED", "Deleted personnel: " + personnel.getFullName()
                 + " (Service No: " + personnel.getServiceNumber() + ")");
+    }
+
+    private com.military.military_personnel_management.entity.Unit resolveUnit(
+            com.military.military_personnel_management.entity.Unit supplied) {
+        if (supplied == null || supplied.getId() == null) {
+            throw new IllegalArgumentException("A valid unit is required");
+        }
+        return unitRepository.findById(supplied.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Assigned unit was not found"));
     }
 
     private void validatePersonnel(Personnel personnel, Long currentId) {
